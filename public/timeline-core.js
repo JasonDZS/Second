@@ -50,6 +50,11 @@
       eventTime: (external = {}, helpers = {}) => assistantEventTime(external.eventTs || external.event_ts, helpers.relativeTime),
       isThreadTrace: (ev = {}) => ev.kind === "entry" && /会话新消息|线程新消息|线程消息/.test(String(ev.title || "")),
     },
+    discord: messageSourceChannel("discord", "Discord"),
+    telegram: messageSourceChannel("telegram", "Telegram"),
+    whatsapp: messageSourceChannel("whatsapp", "WhatsApp"),
+    feishu: messageSourceChannel("feishu", "Feishu"),
+    dingding: messageSourceChannel("dingding", "DingTalk"),
   };
 
   const DEFAULT_SOURCE_CHANNEL = {
@@ -537,6 +542,47 @@
   function assistantEventTime(value, relativeTime) {
     if (!value) return "";
     return typeof relativeTime === "function" ? relativeTime(value) : String(value);
+  }
+
+  function messageSourceChannel(id, label) {
+    return {
+      id,
+      label,
+      icon: PRODUCT_LOGO_SOURCES[id] || "",
+      iconClass: `source-icon-${id}`,
+      actorKind: "entry",
+      kindLabel: "输入消息",
+      threadKindLabel: "继续输入",
+      originalSubtitle: `${label} · 原始消息`,
+      threadSubtitle: `${label} · 继续消息`,
+      channelLabel: (external = {}) => platformChannelLabel(label, external),
+      authorLabel: (external = {}) => platformUserLabel(label, external),
+      eventTime: (external = {}, helpers = {}) => genericEventTime(external.eventTs || external.event_ts, helpers.relativeTime),
+      isThreadTrace: (ev = {}) => ev.kind === "entry" && /会话新消息|线程新消息|线程消息/.test(String(ev.title || "")),
+    };
+  }
+
+  function platformChannelLabel(label, external = {}) {
+    if (external.channelLabel) return external.channelLabel;
+    if (external.channelName) return external.channelName;
+    if (external.channel) return `${label} ${external.channel}`;
+    return label;
+  }
+
+  function platformUserLabel(label, external = {}) {
+    const user = external.userName || external.user || "requester";
+    return user === "requester" ? `${label} requester` : `${label} ${user}`;
+  }
+
+  function genericEventTime(value, relativeTime) {
+    if (!value) return "";
+    const text = String(value);
+    let iso = text;
+    if (/^\d+(\.\d+)?$/.test(text)) {
+      const numeric = Number(text);
+      iso = new Date((numeric > 9999999999 ? numeric : numeric * 1000)).toISOString();
+    }
+    return typeof relativeTime === "function" ? relativeTime(iso) : iso;
   }
 
   function slackEventTime(ts, relativeTime) {

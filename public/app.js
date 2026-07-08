@@ -33,6 +33,7 @@
         taskPrompt: "",
         taskWorkspace: "",
         publicAccessForm: null,
+        channelForms: {},
         slackForm: null,
         slackManifest: "",
         settingsChannelConfig: null,
@@ -47,6 +48,7 @@
         mobilePairingQrSvg: "",
         mobilePairingUrl: "",
         mobileMockStatus: "idle",
+        onboardingChannel: "slack",
         onboardingStep: 0,
         onboardingAuthLevel: "balanced",
         profilePanel: false,
@@ -94,7 +96,13 @@
   } = Profile;
   const {
     channelMetaParts,
+    discordInviteUrl,
+    isMessageChannelConfigurable,
     latestSlackStatus,
+    latestMessageChannelStatus,
+    messageChannelFormFromPublic,
+    messageChannelPublicConfig,
+    normalizeMessageChannelId,
     slackFormFromPublic,
   } = SlackSettings;
 
@@ -128,21 +136,32 @@
     PRODUCT_NAME,
     PRODUCT_LOGO_SOURCES,
     channelMetaParts,
+    discordInviteUrl,
     engineColor,
     engineStatus,
     escapeAttr,
     escapeHtml,
     latestSlackStatus,
+    latestMessageChannelStatus: SlackSettings.latestMessageChannelStatus,
+    messageChannelConfigSpec: SlackSettings.messageChannelConfigSpec,
+    messageChannelPublicConfig: SlackSettings.messageChannelPublicConfig,
+    missingFieldLabels: SlackSettings.missingFieldLabels,
     relativeTime,
   });
   const onboardingViewRenderer = OnboardingView.createOnboardingView
     ? OnboardingView.createOnboardingView({
         PRODUCT_NAME,
         PRODUCT_LOGO_SOURCES,
+        discordInviteUrl,
         engineStatus,
         escapeAttr,
         escapeHtml,
         latestSlackStatus,
+        latestMessageChannelStatus: SlackSettings.latestMessageChannelStatus,
+        messageChannelConfigSpec: SlackSettings.messageChannelConfigSpec,
+        messageChannelPublicConfig: SlackSettings.messageChannelPublicConfig,
+        missingFieldLabels: SlackSettings.missingFieldLabels,
+        normalizeMessageChannelId: SlackSettings.normalizeMessageChannelId,
         relativeTime,
       })
     : null;
@@ -219,6 +238,7 @@
     app,
     cssEscape,
     currentProfileForm,
+    currentChannelForm,
     currentPublicAccessForm,
     currentSlackForm,
     getState: () => state,
@@ -228,6 +248,10 @@
     refresh,
     render,
     showToast,
+    isMessageChannelConfigurable,
+    messageChannelFormFromPublic,
+    messageChannelPublicConfig,
+    normalizeMessageChannelId,
     slackFormFromPublic,
     publicAccessFormFromState,
     ui,
@@ -254,6 +278,11 @@
     if (event.target.matches("[data-slack-field]")) {
       const form = currentSlackForm();
       form[event.target.dataset.slackField] =
+        event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    }
+    if (event.target.matches("[data-channel-field]")) {
+      const form = currentChannelForm(event.target.dataset.channelId || ui.settingsChannelConfig);
+      form[event.target.dataset.channelField] =
         event.target.type === "checkbox" ? event.target.checked : event.target.value;
     }
     if (event.target.matches("[data-public-access-field]")) {
@@ -291,6 +320,12 @@
     if (event.target.matches("[data-slack-field]")) {
       const form = currentSlackForm();
       form[event.target.dataset.slackField] =
+        event.target.type === "checkbox" ? event.target.checked : event.target.value;
+      render();
+    }
+    if (event.target.matches("[data-channel-field]")) {
+      const form = currentChannelForm(event.target.dataset.channelId || ui.settingsChannelConfig);
+      form[event.target.dataset.channelField] =
         event.target.type === "checkbox" ? event.target.checked : event.target.value;
       render();
     }
@@ -336,8 +371,47 @@
     const previousState = state;
     state = nextState;
     reconcileSelection();
+    if (ui.view === "onboarding") patchOnboardingChannelStatuses(nextState);
     if (!shouldRenderStateUpdate(previousState, nextState)) return;
     scheduleRender();
+  }
+
+  function patchOnboardingChannelStatuses(nextState) {
+    if (!app || !nextState?.integrations) return;
+    const elements = app.querySelectorAll("[data-onboarding-channel-status]");
+    if (!elements.length) return;
+    const statuses = onboardingChannelStatuses(nextState);
+    for (const element of elements) {
+      const id = normalizeOnboardingChannelId(element.dataset.onboardingChannelStatus);
+      const status = statuses.get(id);
+      if (!status) continue;
+      element.textContent = status.label || "";
+      if (element.classList.contains("pill")) {
+        element.className = `pill ${status.cls || ""}`.trim();
+      } else {
+        element.className = status.cls || "";
+      }
+    }
+  }
+
+  function onboardingChannelStatuses(nextState) {
+    const statuses = new Map();
+    const slack = nextState.integrations?.slack || {};
+    statuses.set("slack", latestSlackStatus ? latestSlackStatus(slack) : { label: "未连接", cls: "kind-amber" });
+    for (const id of ["discord", "telegram", "whatsapp", "dingding", "feishu"]) {
+      const channel = (nextState.channels || []).find((item) => item.id === id) || {};
+      const config = messageChannelPublicConfig ? messageChannelPublicConfig(nextState, id) : {};
+      const status = latestMessageChannelStatus
+        ? latestMessageChannelStatus(id, config, channel)
+        : { label: config.configured ? "已配置" : "未配置", cls: config.configured ? "risk-low" : "kind-amber" };
+      statuses.set(id, status);
+    }
+    return statuses;
+  }
+
+  function normalizeOnboardingChannelId(id) {
+    if (!normalizeMessageChannelId) return String(id || "");
+    return normalizeMessageChannelId(id);
   }
 
   function reconcileSelection() {
@@ -457,11 +531,11 @@
 
   function onboardingView() {
     if (!onboardingViewRenderer) return shellView.emptyPage("初始化", "引导页模块未加载。");
-    return onboardingViewRenderer.render(state, ui, currentSlackForm, currentPublicAccessForm);
+    return onboardingViewRenderer.render(state, ui, currentSlackForm, currentPublicAccessForm, currentChannelForm);
   }
 
   function settingsView() {
-    return settingsViewRenderer.render(state, ui, currentSlackForm, currentPublicAccessForm);
+    return settingsViewRenderer.render(state, ui, currentSlackForm, currentPublicAccessForm, currentChannelForm);
   }
 
   function assistantWidget() {
@@ -471,6 +545,19 @@
   function currentSlackForm() {
     if (!ui.slackForm) ui.slackForm = slackFormFromState();
     return ui.slackForm;
+  }
+
+  function currentChannelForm(channelId) {
+    const id = normalizeMessageChannelId ? normalizeMessageChannelId(channelId || ui.settingsChannelConfig) : channelId;
+    if (!id) return {};
+    if (!ui.channelForms) ui.channelForms = {};
+    if (!ui.channelForms[id]) ui.channelForms[id] = channelFormFromState(id);
+    return ui.channelForms[id];
+  }
+
+  function channelFormFromState(channelId) {
+    const config = messageChannelPublicConfig ? messageChannelPublicConfig(state, channelId) : {};
+    return messageChannelFormFromPublic ? messageChannelFormFromPublic(channelId, config) : {};
   }
 
   function slackFormFromState() {

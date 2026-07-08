@@ -39,6 +39,7 @@ const {
 } = require("./channels");
 const { createChannelController } = require("./channels/controller");
 const { createChannelProcessor } = require("./channels/processor");
+const { getPublicChannelConfig, getPublicChannelConfigs, saveChannelConfig } = require("./channel-config");
 const { getPublicSlackConfig, getSlackConfig, saveSlackConfig } = require("./slack-config");
 const { createDecisionDomain } = require("./domain/decisions");
 const { computePhase1Metrics } = require("./domain/metrics");
@@ -116,6 +117,7 @@ const decorateState = createStateDecorator({
   DATA_DIR,
   DEFAULT_PORT,
   computePhase1Metrics,
+  getPublicChannelConfigs,
   getPublicAccessConfig: (state) => publicAccess.publicConfig(state),
   getPublicMobilePushConfig: () => mobilePush.publicConfig(),
   getPublicSlackConfig,
@@ -182,6 +184,8 @@ const handleApi = createApiHandler({
   decorateState,
   detectEngines,
   getChannelAdapter,
+  getPublicChannelConfig,
+  getPublicChannelConfigs,
   getPublicSlackConfig,
   getRunningTasks,
   isTaskRunning,
@@ -200,6 +204,7 @@ const handleApi = createApiHandler({
   resumeLatestTaskRun,
   runCodexTask,
   saveSlackConfig,
+  saveChannelConfig,
   saveState,
   sendJson,
   shouldCompleteClarificationDecision,

@@ -48,7 +48,7 @@ The normalized inbound envelopes are:
 }
 ```
 
-Any future Linear, ClickUp, Feishu, or DingTalk adapter should map its native webhook/card events into these envelopes and reuse the same Second task/decision pipeline.
+Any future Linear or ClickUp adapter should map its native webhook/card events into these envelopes and reuse the same Second task/decision pipeline.
 
 ## Current Slack Adapter
 
@@ -65,3 +65,19 @@ Slack is composed from `server/channels/slack.js` plus helpers under `server/cha
 HTTP mode needs a public HTTPS URL or tunnel for callbacks. Socket Mode does not.
 
 The Slack adapter intentionally follows the Hermes-agent integration shape for the MVP: Socket Mode receives events/interactions, Slack Web API sends messages, and optional user/channel allowlists bound who may trigger local execution.
+
+## Additional Message Sources
+
+Second also exposes implemented adapters for Discord, Telegram, WhatsApp, DingTalk, and Feishu. They follow the same gateway shape used by Hermes Agent: a platform-specific transport receives messages, normalizes them into a `task.requested` envelope, and the daemon owns execution plus final result delivery back to the source conversation.
+
+These adapters can be configured from Settings -> 信息接收渠道 in the browser console. Secrets are written to `.second/secrets/<channel>.json` with local-only file permissions and are not echoed back to the frontend. Environment variables still override local settings, which keeps deployments scriptable and makes local UI configuration safe for developer machines.
+
+Current endpoints:
+
+- Discord Gateway: when `DISCORD_BOT_TOKEN` is configured, Second opens Discord Gateway, listens for DMs, bot mentions, and known task threads, and replies through the Discord Bot API. Set `DISCORD_APPLICATION_ID` or fill Application ID in the UI to generate a one-click Bot invite URL without using Discord's OAuth2 URL Generator. By default Second requests only non-privileged intents so the Gateway can connect immediately after saving a bot token. Enable `SECOND_DISCORD_MESSAGE_CONTENT_INTENT=1` or the UI switch only after the same privileged intent is enabled in Discord Developer Portal. `POST /discord/webhook` also accepts relay payloads or interaction pings.
+- `POST /telegram/webhook`: Telegram Bot API updates; replies through `sendMessage` with `TELEGRAM_BOT_TOKEN`. Optional request verification uses `TELEGRAM_WEBHOOK_SECRET`.
+- `GET|POST /whatsapp/webhook`: WhatsApp Cloud API webhook verification and message events; replies through the Graph API with `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID`.
+- `POST /dingtalk/webhook`: DingTalk outgoing robot payloads; replies through a custom robot `DINGTALK_WEBHOOK_URL`, optionally signed with `DINGTALK_SECRET`.
+- `POST /feishu/webhook`: Feishu/Lark event subscription payloads including `url_verification`; replies through `FEISHU_WEBHOOK_URL`.
+
+All five adapters support optional allowlists with `SECOND_<PLATFORM>_ALLOWED_USERS` and `SECOND_<PLATFORM>_ALLOWED_*` channel/chat variables documented in `.env.example`. Human Gate decision events remain in Second, matching Slack: message platforms are used for intake, follow-ups, and final-result delivery.

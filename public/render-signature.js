@@ -60,6 +60,7 @@
       return stableJson({
         ...sidebar,
         onboardingStep: ui.onboardingStep,
+        onboardingChannel: ui.onboardingChannel,
         onboardingAuthLevel: ui.onboardingAuthLevel,
         onboardingMobileSkipped: Boolean(ui.onboardingMobileSkipped),
         onboardingPushEnabled: ui.onboardingPushEnabled,
@@ -69,7 +70,7 @@
         mobileMockStatus: ui.mobileMockStatus,
         daemon: nextState.daemon,
         engines: nextState.engines,
-        integrations: nextState.integrations,
+        integrations: onboardingIntegrationsSignature(nextState.integrations),
         profile: profileSignature(nextState.profile),
         rules: nextState.rules,
         settings: nextState.settings,
@@ -206,6 +207,31 @@
     };
   }
 
+  function onboardingIntegrationsSignature(integrations = {}) {
+    return stripVolatileEvents({
+      mobilePwa: integrations.mobilePwa,
+      publicAccess: integrations.publicAccess,
+      slack: integrations.slack,
+      channelConfigs: integrations.channelConfigs,
+      discord: integrations.discord,
+      telegram: integrations.telegram,
+      whatsapp: integrations.whatsapp,
+      dingding: integrations.dingding,
+      feishu: integrations.feishu,
+    });
+  }
+
+  function stripVolatileEvents(value) {
+    if (Array.isArray(value)) return value.map(stripVolatileEvents);
+    if (!value || typeof value !== "object") return value;
+    const output = {};
+    for (const key of Object.keys(value).sort()) {
+      if (key === "recentEvents") continue;
+      output[key] = stripVolatileEvents(value[key]);
+    }
+    return output;
+  }
+
   function activeTaskCount(state = {}) {
     if (Array.isArray(state.tasks)) {
       return state.tasks.filter((task) => (
@@ -226,9 +252,11 @@
     mobilePwaSignature,
     publicAccessSignature,
     mobileMetricsSignature,
+    onboardingIntegrationsSignature,
     profileSignature,
     renderSignature,
     stableJson,
+    stripVolatileEvents,
     taskSignature,
   };
 });

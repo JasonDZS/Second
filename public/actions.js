@@ -15,6 +15,7 @@
       api,
       app,
       cssEscape,
+      currentChannelForm,
       currentProfileForm,
       currentPublicAccessForm,
       currentSlackForm,
@@ -25,6 +26,10 @@
       refresh,
       render,
       showToast,
+      isMessageChannelConfigurable,
+      messageChannelFormFromPublic,
+      messageChannelPublicConfig,
+      normalizeMessageChannelId,
       slackFormFromPublic,
       ui,
       updateProfileModalPreview,
@@ -56,6 +61,23 @@
           render();
         } else if (data.action === "onboarding-auth-level") {
           ui.onboardingAuthLevel = data.level || "balanced";
+          render();
+        } else if (data.action === "onboarding-channel") {
+          const channelId = data.id === "slack"
+            ? "slack"
+            : normalizeMessageChannelId
+              ? normalizeMessageChannelId(data.id)
+              : data.id;
+          ui.onboardingChannel = channelId || "slack";
+          if (channelId && channelId !== "slack" && isMessageChannelConfigurable?.(channelId)) {
+            if (!ui.channelForms) ui.channelForms = {};
+            if (!ui.channelForms[channelId]) {
+              ui.channelForms[channelId] = messageChannelFormFromPublic?.(
+                channelId,
+                messageChannelPublicConfig?.(state, channelId) || {},
+              ) || {};
+            }
+          }
           render();
         } else if (data.action === "onboarding-skip-mobile") {
           ui.onboardingMobileSkipped = true;
@@ -231,10 +253,21 @@
           if (data.id === "slack") {
             ui.settingsChannelConfig = "slack";
             render();
+          } else if (isMessageChannelConfigurable?.(data.id)) {
+            const channelId = normalizeMessageChannelId ? normalizeMessageChannelId(data.id) : data.id;
+            ui.settingsChannelConfig = channelId;
+            if (!ui.channelForms) ui.channelForms = {};
+            if (!ui.channelForms[channelId]) {
+              ui.channelForms[channelId] = messageChannelFormFromPublic?.(
+                channelId,
+                messageChannelPublicConfig?.(state, channelId) || {},
+              ) || {};
+            }
+            render();
           } else if (data.id === "assistant") {
             showToast("对话助手无需额外配置，可用开关控制是否处理本地对话");
           } else {
-            showToast("该通道配置入口尚未接入");
+            showToast("该通道的配置面板尚未接入");
           }
         } else if (data.action === "close-settings-channel-config") {
           ui.settingsChannelConfig = null;
@@ -406,6 +439,34 @@
             ui.selectedTask = result.task.id;
             render();
           }
+        } else if (data.action === "save-channel-config") {
+          const channelId = normalizeMessageChannelId ? normalizeMessageChannelId(data.id || ui.settingsChannelConfig) : data.id || ui.settingsChannelConfig;
+          const form = currentChannelForm ? currentChannelForm(channelId) : {};
+          ui.busy = `${channelId}-save`;
+          render();
+          const result = await api(`/api/integrations/${encodeURIComponent(channelId)}/config`, {
+            method: "POST",
+            body: form,
+          });
+          ui.busy = false;
+          if (!ui.channelForms) ui.channelForms = {};
+          ui.channelForms[channelId] = messageChannelFormFromPublic?.(channelId, result.channel || {}) || {};
+          showToast(`${result.channel?.label || channelId} 配置已保存`);
+          await refresh();
+        } else if (data.action === "channel-test-message") {
+          const channelId = normalizeMessageChannelId ? normalizeMessageChannelId(data.id || ui.settingsChannelConfig) : data.id || ui.settingsChannelConfig;
+          const form = currentChannelForm ? currentChannelForm(channelId) : {};
+          const label = messageChannelPublicConfig?.(state, channelId)?.label || channelId;
+          const result = await api(`/api/integrations/${encodeURIComponent(channelId)}/test-message`, {
+            method: "POST",
+            body: {
+              channel: form.testTarget,
+              testTarget: form.testTarget,
+              text: `${PRODUCT_NAME} ${label} 连接测试: 本地 daemon 可以发送消息。`,
+            },
+          });
+          if (result.result?.ok === false) throw new Error(result.result.error || result.result.reason || `${label} 测试消息失败`);
+          showToast(`${label} 测试消息已发送`);
         } else if (data.action === "mobile-mock-connect") {
           ui.mobileMockStatus = "connected";
           ui.onboardingPushEnabled = true;

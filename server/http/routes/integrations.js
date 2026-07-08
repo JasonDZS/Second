@@ -1,5 +1,6 @@
 "use strict";
 
+const { isConfigurableChannel, normalizeChannelConfigId } = require("../../channel-config");
 const { truthy } = require("./system");
 
 async function handleIntegrationRoutes(req, res, url, ctx) {
@@ -8,12 +9,14 @@ async function handleIntegrationRoutes(req, res, url, ctx) {
     broadcast,
     decorateState,
     getChannelAdapter,
+    getPublicChannelConfig,
     getPublicSlackConfig,
     loadState,
     nowIso,
     processChannelEnvelope,
     readBody,
     restartChannelTransports,
+    saveChannelConfig,
     saveSlackConfig,
     saveState,
     sendJson,
@@ -56,11 +59,64 @@ async function handleIntegrationRoutes(req, res, url, ctx) {
 
   if (req.method === "POST" && url.pathname === "/api/integrations/slack/test-message") {
     const body = await readBody(req);
-    const result = await getChannelAdapter("slack").sendTestMessage({
+    const result = await sendAdapterTestMessage(getChannelAdapter("slack"), {
       channel: body.channel,
       text: body.text,
     });
-    sendJson(res, result.ok === false && !result.skipped ? 502 : 200, { result });
+    sendJson(res, 200, { result });
+    return true;
+  }
+
+  const configMatch = url.pathname.match(/^\/api\/integrations\/([^/]+)\/config$/);
+  if (configMatch && req.method === "GET") {
+    const channelId = normalizeChannelConfigId(configMatch[1]);
+    if (!isConfigurableChannel(channelId)) {
+      sendJson(res, 404, { error: "Channel integration is not configurable" });
+      return true;
+    }
+    sendJson(res, 200, { channel: getPublicChannelConfig(channelId) });
+    return true;
+  }
+
+  if (configMatch && req.method === "POST") {
+    const channelId = normalizeChannelConfigId(configMatch[1]);
+    if (!isConfigurableChannel(channelId)) {
+      sendJson(res, 404, { error: "Channel integration is not configurable" });
+      return true;
+    }
+    const body = await readBody(req);
+    const channel = saveChannelConfig(channelId, body);
+    const state = loadState();
+    appendEvent(state, {
+      type: `channel.${channelId}.config_saved`,
+      text: `channel.${channelId}.config_saved`,
+      channelId,
+    });
+    saveState(state);
+    restartChannelTransports();
+    broadcast({ type: "state", state: decorateState(loadState()) });
+    sendJson(res, 200, { channel });
+    return true;
+  }
+
+  const testMatch = url.pathname.match(/^\/api\/integrations\/([^/]+)\/test-message$/);
+  if (testMatch && req.method === "POST") {
+    const channelId = normalizeChannelConfigId(testMatch[1]);
+    if (!isConfigurableChannel(channelId)) {
+      sendJson(res, 404, { error: "Channel integration is not configurable" });
+      return true;
+    }
+    const adapter = getChannelAdapter(channelId);
+    if (!adapter?.sendTestMessage) {
+      sendJson(res, 404, { error: "Channel adapter is unavailable" });
+      return true;
+    }
+    const body = await readBody(req);
+    const result = await sendAdapterTestMessage(adapter, {
+      channel: body.channel || body.testTarget,
+      text: body.text,
+    });
+    sendJson(res, 200, { result });
     return true;
   }
 
@@ -123,6 +179,19 @@ function firstCsv(value) {
     .find(Boolean);
 }
 
+async function sendAdapterTestMessage(adapter, input = {}) {
+  try {
+    const result = await adapter.sendTestMessage(input);
+    return result || { ok: false, skipped: true, reason: "No test message result" };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error.message || "Test message failed",
+    };
+  }
+}
+
 module.exports = {
   handleIntegrationRoutes,
+  sendAdapterTestMessage,
 };

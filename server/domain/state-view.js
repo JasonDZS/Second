@@ -5,6 +5,7 @@ function createStateDecorator(deps = {}) {
     DATA_DIR = "",
     DEFAULT_PORT = 7317,
     computePhase1Metrics,
+    getPublicChannelConfigs = () => ({}),
     getPublicAccessConfig = () => ({}),
     getPublicMobilePushConfig = () => ({}),
     getPublicSlackConfig = () => ({}),
@@ -28,6 +29,7 @@ function createStateDecorator(deps = {}) {
       ...getPublicSlackConfig(),
       recentEvents: slackRecentEvents,
     };
+    const channelConfigs = withChannelRecentEvents(getPublicChannelConfigs(), state.events || []);
     return {
       ...state,
       channels: decorateChannels(state.channels || [], {
@@ -54,6 +56,8 @@ function createStateDecorator(deps = {}) {
       },
       integrations: {
         ...(state.integrations || {}),
+        channelConfigs,
+        ...channelConfigs,
         slack,
         mobilePwa: {
           ...getPublicMobilePushConfig(),
@@ -72,6 +76,20 @@ function createStateDecorator(deps = {}) {
   };
 }
 
+function withChannelRecentEvents(configs = {}, events = []) {
+  return Object.fromEntries(
+    Object.entries(configs || {}).map(([id, config]) => [
+      id,
+      {
+        ...config,
+        recentEvents: events
+          .filter((event) => event.channelId === id || String(event.type || "").startsWith(`channel.${id}`))
+          .slice(0, 8),
+      },
+    ]),
+  );
+}
+
 function decorateChannels(channels = [], context = {}) {
   const adaptersById = new Map((context.adapters || []).map((adapter) => [adapter.id, adapter]));
   return channels.map((channel) => decorateChannel(channel, adaptersById.get(channel.id), context));
@@ -86,6 +104,7 @@ function decorateChannel(channel = {}, adapter = null, context = {}) {
     };
   }
   if (channel.id === "slack") return decorateSlackChannel(channel, context.slack || {});
+  if (adapter && adapter.status === "implemented") return decorateImplementedChannel(channel, adapter);
   if (adapter && (adapter.kind === "placeholder" || adapter.status === "not_implemented")) {
     return {
       ...channel,
@@ -97,12 +116,20 @@ function decorateChannel(channel = {}, adapter = null, context = {}) {
   return channel;
 }
 
+function decorateImplementedChannel(channel = {}, adapter = {}) {
+  const connected = Boolean(adapter.configured || channel.status === "connected");
+  return {
+    ...channel,
+    status: connected ? "connected" : "disconnected",
+    notify: connected ? channel.notify !== false : false,
+    meta: adapter.meta || channel.meta || `${channel.name || adapter.name} webhook adapter`,
+  };
+}
+
 function placeholderChannelMeta(channel = {}) {
   const map = {
     linear: "适配层未接入 · 连接后支持指派 issue 与状态自动同步",
     clickup: "适配层未接入 · 连接后支持指派任务与定时任务触发",
-    feishu: "适配层未接入 · 后续接入飞书机器人消息与卡片审批",
-    dingding: "适配层未接入 · 后续接入钉钉机器人消息与互动卡片",
   };
   return map[channel.id] || "适配层未接入";
 }

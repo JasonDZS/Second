@@ -12,6 +12,7 @@ class WebSocketClient extends EventEmitter {
     this.buffer = Buffer.alloc(0);
     this.handshakeDone = false;
     this.closeRequested = false;
+    this.closeInfo = null;
     this.fragments = [];
     this.fragmentOpcode = null;
   }
@@ -49,7 +50,7 @@ class WebSocketClient extends EventEmitter {
 
     this.socket.on("data", (chunk) => this.onData(chunk));
     this.socket.on("error", (error) => this.emit("error", error));
-    this.socket.on("close", () => this.emit("close"));
+    this.socket.on("close", () => this.emit("close", this.closeInfo || {}));
     return this;
   }
 
@@ -78,7 +79,13 @@ class WebSocketClient extends EventEmitter {
       if (headerEnd === -1) return;
       const header = this.buffer.slice(0, headerEnd).toString("utf8");
       this.buffer = this.buffer.slice(headerEnd + 4);
-      this.verifyHandshake(header);
+      try {
+        this.verifyHandshake(header);
+      } catch (error) {
+        this.emit("error", error);
+        if (this.socket) this.socket.end();
+        return;
+      }
       this.handshakeDone = true;
       this.emit("open");
     }
@@ -141,6 +148,7 @@ class WebSocketClient extends EventEmitter {
 
   handleFrame({ fin, opcode, payload }) {
     if (opcode === 0x8) {
+      this.closeInfo = parseClosePayload(payload);
       if (!this.closeRequested) this.sendFrame(0x8, Buffer.alloc(0));
       if (this.socket) this.socket.end();
       return;
@@ -204,4 +212,12 @@ function unmask(payload, mask) {
   return maskPayload(payload, mask);
 }
 
-module.exports = { WebSocketClient };
+function parseClosePayload(payload) {
+  if (!Buffer.isBuffer(payload) || payload.length < 2) return {};
+  return {
+    code: payload.readUInt16BE(0),
+    reason: payload.length > 2 ? payload.slice(2).toString("utf8") : "",
+  };
+}
+
+module.exports = { WebSocketClient, parseClosePayload };

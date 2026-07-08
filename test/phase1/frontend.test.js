@@ -334,6 +334,83 @@ test("frontend render signatures ignore unrelated runtime noise for inbox view",
   assert.notEqual(mobileFirst, mobileSecond);
 });
 
+test("frontend onboarding render signatures ignore message channel event churn", () => {
+  const ui = { view: "onboarding", onboardingStep: 2, onboardingChannel: "discord" };
+  const baseDiscord = {
+    id: "discord",
+    label: "Discord",
+    configured: true,
+    missingFields: [],
+    botTokenConfigured: true,
+    botTokenLabel: "abc...xyz",
+    messageContentIntent: false,
+    recentEvents: [{ type: "channel.gateway.connecting", at: "2026-07-08T00:00:00.000Z" }],
+  };
+  const baseState = {
+    profile: { name: "Jason", avatar: "J", agentName: "Jason 的分身" },
+    rules: [],
+    metrics: { pendingDecisions: 0, runningTasks: 0 },
+    decisions: [],
+    tasks: [],
+    daemon: { port: 7317 },
+    engines: [{ id: "codex", status: "ok" }],
+    settings: { defaultEngine: "codex" },
+    integrations: {
+      slack: {
+        socketMode: true,
+        botTokenConfigured: true,
+        appTokenConfigured: true,
+        recentEvents: [{ type: "channel.socket.connecting", at: "2026-07-08T00:00:00.000Z" }],
+      },
+      discord: baseDiscord,
+      channelConfigs: { discord: baseDiscord },
+    },
+  };
+
+  const first = renderSignatureUi.renderSignature(baseState, ui);
+  const eventOnly = renderSignatureUi.renderSignature(
+    {
+      ...baseState,
+      integrations: {
+        ...baseState.integrations,
+        slack: {
+          ...baseState.integrations.slack,
+          recentEvents: [{ type: "channel.socket.error", at: "2026-07-08T00:00:02.000Z" }],
+        },
+        discord: {
+          ...baseDiscord,
+          recentEvents: [{ type: "channel.gateway.error", at: "2026-07-08T00:00:02.000Z" }],
+        },
+        channelConfigs: {
+          discord: {
+            ...baseDiscord,
+            recentEvents: [{ type: "channel.gateway.error", at: "2026-07-08T00:00:02.000Z" }],
+          },
+        },
+      },
+    },
+    ui,
+  );
+  assert.equal(first, eventOnly);
+
+  assert.notEqual(
+    first,
+    renderSignatureUi.renderSignature(
+      {
+        ...baseState,
+        integrations: {
+          ...baseState.integrations,
+          discord: { ...baseDiscord, configured: false, missingFields: ["botToken"] },
+          channelConfigs: {
+            discord: { ...baseDiscord, configured: false, missingFields: ["botToken"] },
+          },
+        },
+      },
+      ui,
+    ),
+  );
+});
+
 test("frontend shell view renders navigation and profile modal through a focused module", () => {
   const shell = shellViewUi.createShellView({
     PRODUCT_NAME: "Second",
@@ -587,6 +664,11 @@ test("frontend onboarding view renders real setup actions and mobile connection 
     rules: [],
     settings: { defaultEngine: "codex", codexNetworkAccess: false },
     engines: [{ id: "codex", name: "Codex CLI", command: "codex", status: "ok" }],
+    channels: [
+      { id: "slack", name: "Slack", status: "disconnected", notify: true },
+      { id: "telegram", name: "Telegram", status: "connected", notify: true },
+      { id: "discord", name: "Discord", status: "disconnected", notify: true },
+    ],
     integrations: {
       publicAccess: {
         enabled: true,
@@ -606,6 +688,34 @@ test("frontend onboarding view renders real setup actions and mobile connection 
         botTokenLabel: "xoxb-...",
         appTokenConfigured: false,
       },
+      telegram: {
+        id: "telegram",
+        label: "Telegram",
+        webhookPath: "/telegram/webhook",
+        configured: true,
+        missingFields: [],
+        fieldLabels: { botToken: "Bot Token" },
+        botTokenConfigured: true,
+        botTokenLabel: "12345...abcd",
+        webhookSecretConfigured: false,
+        allowedUsers: "88",
+        allowedChannels: "-1001",
+        testTarget: "-1001",
+        sources: { botToken: "local" },
+      },
+      discord: {
+        id: "discord",
+        label: "Discord",
+        webhookPath: "/discord/webhook",
+        configured: true,
+        missingFields: [],
+        fieldLabels: { botToken: "Bot Token", applicationId: "Application ID" },
+        botTokenConfigured: true,
+        botTokenLabel: "abc...xyz",
+        applicationId: "123456789012345678",
+        messageContentIntent: false,
+        sources: { botToken: "local", applicationId: "local" },
+      },
     },
   };
   const form = () => ({
@@ -620,11 +730,19 @@ test("frontend onboarding view renders real setup actions and mobile connection 
     provider: "cloudflared",
     manualUrl: "https://second.example.com",
   });
+  const channelForm = (id) => slackSettingsUi.messageChannelFormFromPublic(id, state.integrations[id] || {});
   const pairingUrl = "https://second.example.com/mobile.html?pair=test";
   const pairingQrSvg = qrCodeUi.toSvg(pairingUrl, { className: "mobile-qr-svg" });
   const welcome = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 0 }, form);
   const runtime = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 1 }, form);
-  const channel = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 2 }, form);
+  const channel = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 2 }, form, publicAccessForm, channelForm);
+  const telegramChannel = onboarding.render(
+    state,
+    { busy: false, mobileMockStatus: "idle", onboardingStep: 2, onboardingChannel: "telegram" },
+    form,
+    publicAccessForm,
+    channelForm,
+  );
   const mobileConnection = onboarding.render(
     state,
     { busy: false, mobileMockStatus: "idle", onboardingStep: 3, mobilePairingUrl: pairingUrl, mobilePairingQrSvg: pairingQrSvg },
@@ -643,11 +761,39 @@ test("frontend onboarding view renders real setup actions and mobile connection 
   assert.match(runtime, /data-action="detect-engines"/);
   assert.match(channel, /data-action="save-slack-config"/);
   assert.match(channel, /data-slack-field="botToken"/);
-  assert.match(channel, /这些值从哪里获取/);
+  assert.match(channel, /data-action="onboarding-channel" data-id="discord"/);
+  assert.match(channel, /data-action="onboarding-channel" data-id="telegram"/);
+  assert.match(channel, /data-action="onboarding-channel" data-id="whatsapp"/);
+  assert.match(channel, /data-action="onboarding-channel" data-id="dingding"/);
+  assert.match(channel, /data-action="onboarding-channel" data-id="feishu"/);
+  assert.match(channel, /data-onboarding-channel-status="slack"/);
+  assert.match(channel, /data-onboarding-channel-status="discord"/);
+  assert.match(channel, /Slack 最少只要 3 项/);
   assert.match(channel, /https:\/\/api\.slack\.com\/apps/);
-  assert.match(channel, /Socket Mode \/ App Token/);
+  assert.match(channel, /App-Level Token/);
+  assert.match(channel, /高级设置/);
   assert.match(channel, /aria-current="step"/);
   assert.match(channel, /onboarding-current-label">当前/);
+  assert.match(telegramChannel, /Telegram 这些值从哪里获取/);
+  assert.match(telegramChannel, /https:\/\/core\.telegram\.org\/bots\/api/);
+  assert.match(telegramChannel, /data-channel-field="botToken"/);
+  assert.match(telegramChannel, /data-channel-field="webhookSecret"/);
+  assert.match(telegramChannel, /data-action="save-channel-config" data-id="telegram"/);
+  assert.match(telegramChannel, /\/telegram\/webhook/);
+  const discordChannel = onboarding.render(
+    state,
+    { busy: false, mobileMockStatus: "idle", onboardingStep: 2, onboardingChannel: "discord" },
+    form,
+    publicAccessForm,
+    channelForm,
+  );
+  assert.match(discordChannel, /Discord 最少只要 3 项/);
+  assert.match(discordChannel, /data-channel-field="applicationId"/);
+  assert.match(discordChannel, /data-channel-field="messageContentIntent"/);
+  assert.match(discordChannel, /discord\.com\/oauth2\/authorize\?client_id=123456789012345678/);
+  assert.match(discordChannel, /复制基础邀请链接/);
+  assert.doesNotMatch(discordChannel, /\/discord\/webhook/);
+  assert.match(discordChannel, /Missing Access/);
   assert.match(mobileConnection, /连接手机决策端/);
   assert.match(mobileConnection, /外网访问方式/);
   assert.match(mobileConnection, /data-public-access-field="provider"/);
@@ -663,6 +809,7 @@ test("frontend onboarding view renders real setup actions and mobile connection 
   assert.match(finish, /通知 <b>已跳过<\/b>/);
   assert.match(finish, /data-action="slack-simulate-task"/);
   const css = fs.readFileSync(path.join(__dirname, "../../public/styles.css"), "utf8");
+  assert.match(css, /\.setup-channel-picker\s*\{/);
   assert.match(css, /\.setup-mobile-grid\s*\{/);
   assert.match(css, /\.setup-mobile-actions\s*\{/);
   assert.match(css, /\.setup-mobile-action-links\s*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/s);
@@ -683,6 +830,7 @@ test("frontend settings view renders engines, channel details, and network toggl
     channels: [
       { id: "assistant", name: "对话助手", status: "connected", notify: true, meta: "本地浮动消息助手 · 右下角常驻" },
       { id: "slack", name: "Slack", status: "connected", notify: true, meta: "Socket Mode · 允许频道 2" },
+      { id: "telegram", name: "Telegram", status: "connected", notify: true, meta: "Bot token 已配置 · webhook 入口 /telegram/webhook" },
       { id: "linear", name: "Linear", status: "not_configured", notify: false, meta: "连接后支持 issue 同步" },
     ],
     integrations: {
@@ -700,6 +848,21 @@ test("frontend settings view renders engines, channel details, and network toggl
         lastCheck: { ok: true, at: "2026-07-08T00:00:00.000Z", statusCode: 200 },
       },
       slack: { socketMode: true, botTokenConfigured: true, botTokenLabel: "xoxb-..." },
+      telegram: {
+        id: "telegram",
+        label: "Telegram",
+        webhookPath: "/telegram/webhook",
+        configured: true,
+        missingFields: [],
+        fieldLabels: { botToken: "Bot Token" },
+        botTokenConfigured: true,
+        botTokenLabel: "12345...abcd",
+        webhookSecretConfigured: false,
+        allowedUsers: "88",
+        allowedChannels: "-1001",
+        testTarget: "-1001",
+        sources: { botToken: "local" },
+      },
     },
     metrics: { pendingDecisions: 1 },
   };
@@ -714,6 +877,7 @@ test("frontend settings view renders engines, channel details, and network toggl
     appToken: "",
     signingSecret: "",
   });
+  const channelForm = (id) => slackSettingsUi.messageChannelFormFromPublic(id, state.integrations[id] || {});
   const html = settings.render(
     state,
     { busy: false, slackManifest: "" },
@@ -743,6 +907,7 @@ test("frontend settings view renders engines, channel details, and network toggl
   assert.doesNotMatch(html, /检测方式/);
   assert.match(html, /data-action="channel-config" data-id="slack"/);
   assert.match(html, /data-action="channel-config" data-id="assistant"/);
+  assert.match(html, /data-action="channel-config" data-id="telegram"/);
   assert.match(html, /data-action="channel-config" data-id="linear"/);
   assert.match(html, /channel-processing-toggle/);
   assert.doesNotMatch(html, /data-action="channel-status"/);
@@ -770,11 +935,29 @@ test("frontend settings view renders engines, channel details, and network toggl
       provider: "manual",
       manualUrl: "https://second.example.com",
     }),
+    channelForm,
   );
   assert.match(modalHtml, /settings-channel-modal/);
   assert.match(modalHtml, /data-action="close-settings-channel-config"/);
   assert.match(modalHtml, /Bot User OAuth Token/);
   assert.match(modalHtml, /Socket Mode/);
+
+  const telegramModalHtml = settings.render(
+    state,
+    { busy: false, slackManifest: "", settingsChannelConfig: "telegram" },
+    slackForm,
+    () => ({
+      provider: "manual",
+      manualUrl: "https://second.example.com",
+    }),
+    channelForm,
+  );
+  assert.match(telegramModalHtml, /Telegram 集成/);
+  assert.match(telegramModalHtml, /data-channel-field="botToken"/);
+  assert.match(telegramModalHtml, /data-channel-field="webhookSecret"/);
+  assert.match(telegramModalHtml, /data-action="save-channel-config" data-id="telegram"/);
+  assert.match(telegramModalHtml, /data-action="channel-test-message" data-id="telegram"/);
+  assert.match(telegramModalHtml, /\/telegram\/webhook/);
 
   const css = fs.readFileSync(path.join(__dirname, "../../public/styles.css"), "utf8");
   assert.match(css, /\.public-access-grid\s*\{/);
@@ -1012,6 +1195,49 @@ test("frontend Slack settings helpers build safe forms and status labels", () =>
     cls: "risk-high",
   });
   assert.deepEqual(slackSettingsUi.channelMetaParts("Socket Mode · 允许频道 2"), ["Socket Mode", "允许频道 2"]);
+
+  const telegramForm = slackSettingsUi.messageChannelFormFromPublic("telegram", {
+    botTokenConfigured: true,
+    allowedChannels: "-1001",
+    testTarget: "-1001",
+  });
+  assert.equal(telegramForm.botToken, "");
+  assert.equal(telegramForm.allowedChannels, "-1001");
+  const discordForm = slackSettingsUi.messageChannelFormFromPublic("discord", {
+    applicationId: "123456789012345678",
+    messageContentIntent: true,
+  });
+  assert.equal(discordForm.applicationId, "123456789012345678");
+  assert.equal(discordForm.messageContentIntent, true);
+  assert.equal(
+    slackSettingsUi.discordInviteUrl("123456789012345678"),
+    "https://discord.com/oauth2/authorize?client_id=123456789012345678&scope=bot&permissions=68608",
+  );
+  assert.equal(
+    slackSettingsUi.discordInviteUrl("123456789012345678", { threads: true }),
+    "https://discord.com/oauth2/authorize?client_id=123456789012345678&scope=bot&permissions=274877975552",
+  );
+  assert.equal(slackSettingsUi.isMessageChannelConfigurable("telegram"), true);
+  assert.equal(slackSettingsUi.normalizeMessageChannelId("dingtalk"), "dingding");
+  assert.deepEqual(slackSettingsUi.latestMessageChannelStatus("telegram", { missingFields: ["botToken"], fieldLabels: { botToken: "Bot Token" } }), {
+    label: "缺少 Bot Token",
+    cls: "risk-high",
+  });
+  assert.deepEqual(slackSettingsUi.latestMessageChannelStatus("discord", {
+    recentEvents: [
+      { type: "channel.gateway.connecting" },
+      { type: "channel.gateway.error" },
+    ],
+  }), {
+    label: "Gateway 异常",
+    cls: "risk-high",
+  });
+  assert.deepEqual(slackSettingsUi.latestMessageChannelStatus("discord", {
+    recentEvents: [{ type: "channel.gateway.failed" }],
+  }), {
+    label: "Gateway 连接失败",
+    cls: "risk-high",
+  });
 });
 
 test("frontend action handler mutates UI state through injected dependencies", async () => {
@@ -1023,6 +1249,7 @@ test("frontend action handler mutates UI state through injected dependencies", a
     mobileExpanded: {},
     mobileReplyDrafts: {},
     mobileReplyOpen: {},
+    channelForms: {},
     taskPrompt: "say hello",
     taskWorkspace: "",
   };
@@ -1030,8 +1257,11 @@ test("frontend action handler mutates UI state through injected dependencies", a
   const copied = [];
   let renders = 0;
   let refreshes = 0;
-  const previousNavigator = globalThis.navigator;
-  globalThis.navigator = { clipboard: { writeText: async (text) => copied.push(text) } };
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: async (text) => copied.push(text) } },
+  });
   const handler = actions.createActionHandler({
     MobilePwa: {
       subscribe: async (request) => request("/api/mobile/push/subscribe", { method: "POST", body: { subscription: { endpoint: "https://push.example/sub" } } }),
@@ -1043,13 +1273,40 @@ test("frontend action handler mutates UI state through injected dependencies", a
     api: async (url, options = {}) => {
       calls.push({ url, options });
       if (url === "/api/mobile/pairing") return { url: "https://second.example.com/mobile.html?pair=test" };
+      if (url === "/api/integrations/telegram/config") {
+        return {
+          channel: {
+            id: "telegram",
+            label: "Telegram",
+            botTokenConfigured: true,
+            webhookSecretConfigured: false,
+            allowedChannels: "-1001",
+            testTarget: "-1001",
+          },
+        };
+      }
+      if (url === "/api/integrations/telegram/test-message") return { result: { ok: true } };
       return {};
     },
     app: { querySelector: () => null },
     cssEscape: (value) => value,
     currentProfileForm: () => ({}),
+    currentChannelForm: (id) => ui.channelForms[id] || {},
     currentSlackForm: () => ({}),
-    getState: () => ({ decisions: [{ id: "D-1", selectedOption: "a" }], integrations: { slack: {} } }),
+    getState: () => ({
+      decisions: [{ id: "D-1", selectedOption: "a" }],
+      integrations: {
+        slack: {},
+        telegram: {
+          id: "telegram",
+          label: "Telegram",
+          botTokenConfigured: false,
+          webhookSecretConfigured: false,
+          allowedChannels: "-1001",
+          testTarget: "-1001",
+        },
+      },
+    }),
     profileFormFromState: () => ({ name: "Tester" }),
     randomProfileSeed: () => "seed",
     refresh: async () => {
@@ -1061,6 +1318,10 @@ test("frontend action handler mutates UI state through injected dependencies", a
     showToast: (message) => {
       calls.push({ toast: message });
     },
+    isMessageChannelConfigurable: slackSettingsUi.isMessageChannelConfigurable,
+    messageChannelFormFromPublic: slackSettingsUi.messageChannelFormFromPublic,
+    messageChannelPublicConfig: slackSettingsUi.messageChannelPublicConfig,
+    normalizeMessageChannelId: slackSettingsUi.normalizeMessageChannelId,
     slackFormFromPublic: slackSettingsUi.slackFormFromPublic,
     ui,
     updateProfileModalPreview: () => {
@@ -1070,12 +1331,22 @@ test("frontend action handler mutates UI state through injected dependencies", a
 
   await handler({ action: "nav", view: "tasks" });
   assert.equal(ui.view, "tasks");
+  await handler({ action: "onboarding-channel", id: "telegram" });
+  assert.equal(ui.onboardingChannel, "telegram");
+  assert.equal(ui.channelForms.telegram.allowedChannels, "-1001");
   await handler({ action: "channel-config", id: "slack" });
   assert.equal(ui.settingsChannelConfig, "slack");
   await handler({ action: "close-settings-channel-config" });
   assert.equal(ui.settingsChannelConfig, null);
   await handler({ action: "channel-config", id: "assistant" });
   assert.equal(calls.some((call) => call.toast === "对话助手无需额外配置，可用开关控制是否处理本地对话"), true);
+  await handler({ action: "channel-config", id: "telegram" });
+  assert.equal(ui.settingsChannelConfig, "telegram");
+  ui.channelForms.telegram.botToken = "123:abc";
+  await handler({ action: "save-channel-config", id: "telegram" });
+  assert.equal(calls.some((call) => call.url === "/api/integrations/telegram/config" && call.options.body.botToken === "123:abc"), true);
+  await handler({ action: "channel-test-message", id: "telegram" });
+  assert.equal(calls.some((call) => call.url === "/api/integrations/telegram/test-message" && call.options.body.channel === "-1001"), true);
   await handler({ action: "channel-toggle", id: "assistant", notify: "false" });
   assert.equal(calls.some((call) => call.url === "/api/channels/assistant" && call.options.body.notify === false), true);
   await handler({ action: "noop" });
@@ -1115,7 +1386,8 @@ test("frontend action handler mutates UI state through injected dependencies", a
   await handler({ action: "create-task" });
   assert.equal(calls.some((call) => call.url === "/api/tasks"), true);
   assert.equal(ui.view, "runtime");
-  assert.equal(refreshes, 7);
+  assert.equal(refreshes, 8);
   assert.ok(renders >= 3);
-  globalThis.navigator = previousNavigator;
+  if (previousNavigator) Object.defineProperty(globalThis, "navigator", previousNavigator);
+  else delete globalThis.navigator;
 });
