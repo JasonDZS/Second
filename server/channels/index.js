@@ -1,13 +1,23 @@
 "use strict";
 
 const assistant = require("./assistant");
+const dingtalk = require("./dingtalk");
+const discord = require("./discord");
+const feishu = require("./feishu");
 const slack = require("./slack");
+const telegram = require("./telegram");
+const whatsapp = require("./whatsapp");
 const { placeholderAdapters } = require("./placeholders");
 
 const adapters = new Map(
   [
     assistant,
     slack,
+    discord,
+    telegram,
+    whatsapp,
+    dingtalk,
+    feishu,
     ...placeholderAdapters,
   ].map((adapter) => [adapter.id, adapter]),
 );
@@ -25,6 +35,8 @@ function listChannelAdapters() {
     httpPrefix: adapter.httpPrefix || null,
     supports: adapter.supports || {},
     description: adapter.description || "",
+    configured: typeof adapter.configured === "function" ? adapter.configured() : Boolean(adapter.configured),
+    meta: typeof adapter.meta === "function" ? adapter.meta() : adapter.meta || "",
   }));
 }
 

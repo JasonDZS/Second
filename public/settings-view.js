@@ -13,15 +13,20 @@
       PRODUCT_NAME = "Second",
       PRODUCT_LOGO_SOURCES = {},
       channelMetaParts = (value) => String(value || "").split(" · ").filter(Boolean),
+      discordInviteUrl = () => "",
       engineColor = () => ({ bg: "rgba(217,86,11,.1)", color: "var(--accent)" }),
       engineStatus = () => ({ label: "未知", cls: "tag" }),
       escapeAttr = escapeHtmlAttribute,
       escapeHtml = escapeHtmlText,
       latestSlackStatus = () => ({ label: "未连接", cls: "kind-amber" }),
+      latestMessageChannelStatus = () => ({ label: "未配置", cls: "kind-amber" }),
+      messageChannelConfigSpec = () => null,
+      messageChannelPublicConfig = () => ({}),
+      missingFieldLabels = () => [],
       relativeTime = () => "刚刚",
     } = deps;
 
-    function render(state = {}, ui = {}, currentSlackForm = () => ({}), currentPublicAccessForm = () => ({})) {
+    function render(state = {}, ui = {}, currentSlackForm = () => ({}), currentPublicAccessForm = () => ({}), currentChannelForm = () => ({})) {
       const snippet = `"mcpServers": {
   "second-decision": {
     "command": "second",
@@ -70,7 +75,7 @@
                 ${agentNetworkAccessCard(state)}
               </div>
             </div>
-            ${settingsChannelModal(state, ui, currentSlackForm)}
+            ${settingsChannelModal(state, ui, currentSlackForm, currentChannelForm)}
           </div>
         </div>
       `;
@@ -156,8 +161,10 @@
       return { label: "待检测", cls: "kind-amber" };
     }
 
-    function settingsChannelModal(state, ui, currentSlackForm) {
-      if (ui.settingsChannelConfig !== "slack") return "";
+    function settingsChannelModal(state, ui, currentSlackForm, currentChannelForm) {
+      const channelId = ui.settingsChannelConfig;
+      if (!channelId) return "";
+      if (channelId !== "slack") return messageChannelModal(state, ui, channelId, currentChannelForm);
       const slack = state.integrations?.slack || {};
       const socketStatus = latestSlackStatus(slack);
       return `
@@ -176,6 +183,34 @@
             </div>
             <div class="profile-modal-body settings-channel-modal-body">
               ${slackSetupBody(state, ui, currentSlackForm)}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function messageChannelModal(state, ui, channelId, currentChannelForm) {
+      const spec = messageChannelConfigSpec(channelId);
+      if (!spec) return "";
+      const channel = (state.channels || []).find((item) => item.id === spec.id) || { id: spec.id, name: spec.title || spec.id, mono: spec.id?.[0] };
+      const config = messageChannelPublicConfig(state, spec.id);
+      const status = latestMessageChannelStatus(spec.id, config, channel);
+      return `
+        <div class="profile-modal-backdrop settings-channel-backdrop" role="presentation" data-action="close-settings-channel-config">
+          <section class="profile-modal settings-channel-modal" role="dialog" aria-modal="true" aria-labelledby="settings-channel-title">
+            <div class="profile-modal-head">
+              ${productLogo(channel, "settings-logo-flat")}
+              <div style="flex:1">
+                <h2 id="settings-channel-title">${escapeHtml(spec.title || channel.name || spec.id)}</h2>
+                <div class="settings-meta">${escapeHtml(spec.description || "配置消息通道凭据、入站 Webhook 和测试消息。")}</div>
+              </div>
+              <span class="pill ${status.cls}">${escapeHtml(status.label)}</span>
+              <button class="icon-btn" data-action="close-settings-channel-config" aria-label="关闭">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div class="profile-modal-body settings-channel-modal-body">
+              ${messageChannelSetupBody(state, ui, spec, currentChannelForm)}
             </div>
           </section>
         </div>
@@ -247,34 +282,39 @@
               </label>
               <span class="settings-meta" style="margin:0">推荐。${PRODUCT_NAME} 主动连接 Slack WebSocket,不需要 cloudflared/ngrok。</span>
             </div>
-            <div class="slack-mode-row">
-              <label class="slack-check">
-                <input type="checkbox" data-slack-field="customizeProfileMessages" ${form.customizeProfileMessages ? "checked" : ""} />
-                <span>使用用户头像发 Slack 消息</span>
-              </label>
-              <span class="settings-meta" style="margin:0">需要 Slack scope <span class="mono">chat:write.customize</span>;缺少权限时会自动回退为普通 Bot 头像。</span>
-            </div>
             <div class="slack-config-grid">
               ${secretField(state, currentSlackForm, "botToken", "Bot User OAuth Token", slack.botTokenConfigured, slack.botTokenLabel, "xoxb-...")}
               ${secretField(state, currentSlackForm, "appToken", "App-Level Token", slack.appTokenConfigured, slack.appTokenLabel, "xapp-...")}
-              ${secretField(state, currentSlackForm, "signingSecret", "Signing Secret", slack.signingSecretConfigured, slack.signingSecretLabel, "HTTP callback 模式使用")}
-              <label class="field">
-                <span>Public URL</span>
-                <input data-slack-field="publicUrl" value="${escapeAttr(form.publicUrl)}" placeholder="HTTP callback 模式使用; Socket Mode 可留空" />
-              </label>
               <label class="field">
                 <span>决策通知频道 ID</span>
                 <input data-slack-field="decisionChannel" value="${escapeAttr(form.decisionChannel)}" placeholder="C0123456789" />
               </label>
-              <label class="field">
-                <span>允许用户 ID</span>
-                <input data-slack-field="allowedUsers" value="${escapeAttr(form.allowedUsers)}" placeholder="可选: U123,U456" />
-              </label>
-              <label class="field">
-                <span>允许频道 ID</span>
-                <input data-slack-field="allowedChannels" value="${escapeAttr(form.allowedChannels)}" placeholder="可选: C123,C456" />
-              </label>
             </div>
+            <details class="settings-advanced-options">
+              <summary>高级设置</summary>
+              <div class="slack-mode-row">
+                <label class="slack-check">
+                  <input type="checkbox" data-slack-field="customizeProfileMessages" ${form.customizeProfileMessages ? "checked" : ""} />
+                  <span>使用用户头像发 Slack 消息</span>
+                </label>
+                <span class="settings-meta" style="margin:0">需要 Slack scope <span class="mono">chat:write.customize</span>;缺少权限时会自动回退为普通 Bot 头像。</span>
+              </div>
+              <div class="slack-config-grid">
+                ${secretField(state, currentSlackForm, "signingSecret", "Signing Secret", slack.signingSecretConfigured, slack.signingSecretLabel, "HTTP callback 模式使用")}
+                <label class="field">
+                  <span>Public URL</span>
+                  <input data-slack-field="publicUrl" value="${escapeAttr(form.publicUrl)}" placeholder="HTTP callback 模式使用; Socket Mode 可留空" />
+                </label>
+                <label class="field">
+                  <span>允许用户 ID</span>
+                  <input data-slack-field="allowedUsers" value="${escapeAttr(form.allowedUsers)}" placeholder="可选: U123,U456" />
+                </label>
+                <label class="field">
+                  <span>允许频道 ID</span>
+                  <input data-slack-field="allowedChannels" value="${escapeAttr(form.allowedChannels)}" placeholder="可选: C123,C456" />
+                </label>
+              </div>
+            </details>
             <div class="slack-setup-actions">
               <button class="btn btn-primary" data-action="save-slack-config">${ui.busy === "slack-save" ? "保存中..." : "保存并重连"}</button>
               <button class="btn" data-action="slack-reconnect">重连 Socket</button>
@@ -296,12 +336,96 @@
       `;
     }
 
+    function messageChannelSetupBody(state, ui, spec, currentChannelForm) {
+      const form = currentChannelForm(spec.id);
+      const config = messageChannelPublicConfig(state, spec.id);
+      const missing = missingFieldLabels(spec.id, config);
+      return `
+        <div class="slack-setup-body">
+          ${spec.showWebhookPath === false ? "" : `
+            <div class="slack-mode-row">
+              <span class="section-label">Webhook 入口</span>
+              <span class="settings-meta mono" style="margin:0">${escapeHtml(config.webhookPath || spec.webhookPath || "")}</span>
+            </div>
+          `}
+          <div class="slack-config-grid">
+            ${(spec.secrets || []).map((field) => channelSecretField(spec.id, form, config, field)).join("")}
+            ${(spec.fields || []).map((field) => channelPlainField(spec.id, form, config, field)).join("")}
+          </div>
+          ${messageChannelQuickSetup(spec, form, config)}
+          ${missing.length ? `<div class="public-access-error">还缺少: ${escapeHtml(missing.join("、"))}</div>` : ""}
+          <div class="slack-setup-actions">
+            <button class="btn btn-primary" data-action="save-channel-config" data-id="${escapeAttr(spec.id)}">${ui.busy === `${spec.id}-save` ? "保存中..." : "保存并重连"}</button>
+            <button class="btn" data-action="channel-test-message" data-id="${escapeAttr(spec.id)}">发测试消息</button>
+          </div>
+          <div class="settings-meta">已有 secret 不会在前端回显。对应输入框留空表示不修改;如需更换,直接粘贴新值后保存。</div>
+          ${(spec.notes || []).map((note) => `<div class="settings-meta">${escapeHtml(note)}</div>`).join("")}
+        </div>
+      `;
+    }
+
+    function messageChannelQuickSetup(spec, form, config) {
+      if (spec.id !== "discord") return "";
+      const applicationId = form.applicationId || config.applicationId || "";
+      const inviteUrl = discordInviteUrl(applicationId);
+      const threadInviteUrl = discordInviteUrl(applicationId, { threads: true });
+      return `
+        <div class="slack-manifest-box">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="section-label">Discord Bot 邀请链接</span>
+            <span style="flex:1"></span>
+            ${inviteUrl ? `<a class="text-link" href="${escapeAttr(inviteUrl)}" target="_blank" rel="noreferrer">打开邀请</a>` : ""}
+          </div>
+          ${inviteUrl ? `
+            <div class="code-block mono">${escapeHtml(inviteUrl)}</div>
+            <div class="slack-setup-actions">
+              <button class="btn" data-action="copy" data-copy="${escapeAttr(inviteUrl)}">复制基础邀请链接</button>
+              <button class="btn" data-action="copy" data-copy="${escapeAttr(threadInviteUrl)}">复制 thread 邀请链接</button>
+            </div>
+            <div class="settings-meta">如果 Discord 提示 Integration requires code grant,请到 Bot 页面关闭 Requires OAuth2 Code Grant。Public Bot 也建议保持开启。</div>
+          ` : `
+            <div class="settings-meta">填入 Application ID 后会自动生成邀请链接,不需要手动配置 Redirect URI 或 OAuth2 URL Generator。</div>
+          `}
+        </div>
+      `;
+    }
+
     function secretField(state, currentSlackForm, key, label, configured, tokenLabel, placeholder) {
       const source = state.integrations?.slack?.sources?.[key] || null;
       return `
         <label class="field">
           <span>${escapeHtml(label)} ${configured ? `<em class="secret-state">已配置${tokenLabel ? ` · ${escapeHtml(tokenLabel)}` : ""}${source ? ` · ${escapeHtml(source)}` : ""}</em>` : `<em class="secret-state missing">未配置</em>`}</span>
           <input type="password" autocomplete="off" data-slack-field="${escapeAttr(key)}" value="${escapeAttr(currentSlackForm()[key] || "")}" placeholder="${escapeAttr(placeholder)}" />
+        </label>
+      `;
+    }
+
+    function channelSecretField(channelId, form, config, field) {
+      const configured = Boolean(config[`${field.key}Configured`]);
+      const tokenLabel = config[`${field.key}Label`] || "";
+      const source = config.sources?.[field.key] || null;
+      return `
+        <label class="field">
+          <span>${escapeHtml(field.label)} ${configured ? `<em class="secret-state">已配置${tokenLabel ? ` · ${escapeHtml(tokenLabel)}` : ""}${source ? ` · ${escapeHtml(source)}` : ""}</em>` : `<em class="secret-state missing">未配置</em>`}</span>
+          <input type="password" autocomplete="off" data-channel-id="${escapeAttr(channelId)}" data-channel-field="${escapeAttr(field.key)}" value="${escapeAttr(form[field.key] || "")}" placeholder="${escapeAttr(field.placeholder || "")}" />
+        </label>
+      `;
+    }
+
+    function channelPlainField(channelId, form, config, field) {
+      const source = config.sources?.[field.key] || null;
+      if (field.type === "boolean") {
+        return `
+          <label class="slack-check">
+            <input type="checkbox" data-channel-id="${escapeAttr(channelId)}" data-channel-field="${escapeAttr(field.key)}" ${form[field.key] ? "checked" : ""} />
+            <span>${escapeHtml(field.label)}${source === "env" ? ` <em class="secret-state">env</em>` : ""}</span>
+          </label>
+        `;
+      }
+      return `
+        <label class="field">
+          <span>${escapeHtml(field.label)} ${source === "env" ? `<em class="secret-state">env</em>` : ""}</span>
+          <input data-channel-id="${escapeAttr(channelId)}" data-channel-field="${escapeAttr(field.key)}" value="${escapeAttr(form[field.key] || "")}" placeholder="${escapeAttr(field.placeholder || "")}" />
         </label>
       `;
     }

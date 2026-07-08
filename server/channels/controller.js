@@ -112,6 +112,13 @@ function createChannelController(deps = {}) {
       typeof envelope.response === "function"
         ? envelope.response(data)
         : envelope.response || { status: 200, body: { ok: true } };
+    if (Object.prototype.hasOwnProperty.call(response, "rawBody")) {
+      res.writeHead(response.status || 200, {
+        "Content-Type": response.contentType || "text/plain; charset=utf-8",
+      });
+      res.end(String(response.rawBody ?? ""));
+      return;
+    }
     return sendJson(res, response.status || 200, response.body || { ok: true });
   }
 

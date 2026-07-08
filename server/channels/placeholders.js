@@ -3,8 +3,6 @@
 const placeholderAdapters = [
   placeholder("linear", "Linear", "Issue assignment, comments, and status sync adapter placeholder."),
   placeholder("clickup", "ClickUp", "Task assignment and recurring task adapter placeholder."),
-  placeholder("feishu", "Feishu", "Feishu bot messages and approval cards adapter placeholder."),
-  placeholder("dingding", "DingTalk", "DingTalk bot messages and interactive cards adapter placeholder."),
 ];
 
 function placeholder(id, name, description) {

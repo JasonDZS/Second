@@ -117,8 +117,13 @@
       "claude-code": { bg: "#FBEADD", color: "#C4520E" },
       openclaw: { bg: "#EAF7EE", color: "#067647" },
       slack: { bg: "#EFEAFB", color: "#6941C6" },
+      discord: { bg: "#E8ECFF", color: "#5865F2" },
+      telegram: { bg: "#E5F4FF", color: "#168ACD" },
+      whatsapp: { bg: "#E6F7EC", color: "#128C7E" },
       linear: { bg: "#E7ECFB", color: "#3B5BDB" },
       clickup: { bg: "#FBEADD", color: "#C4520E" },
+      feishu: { bg: "#E8F1FF", color: "#3370FF" },
+      dingding: { bg: "#EAF3FF", color: "#0B7CFF" },
     };
     return map[id] || { bg: "#EDE9DF", color: "#6E6858" };
   }
