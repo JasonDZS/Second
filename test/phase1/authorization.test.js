@@ -189,6 +189,94 @@ test("authorization dry-run route returns daemon verdict without mutating state"
   assert.equal(state.decisions.length, 0);
 });
 
+test("authorization management routes expose overview, audit, and grant revoke", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "second-auth-management-"));
+  const auditFile = path.join(dir, "AUTHORIZATION_AUDIT.log");
+  const state = authorizationState();
+  const intent = authorizationEngine.evaluateAuthorization({ tool: "Bash", command: "git push origin main" }).intent;
+  state.decisions.push({
+    id: "D-manage",
+    status: "approved",
+    title: "授权 push",
+    taskId: "T-1",
+    authorization: {
+      fingerprint: intent.fingerprint,
+      ruleId: "gate.push_shared",
+      intent,
+    },
+  });
+  state.authorization.grants.push({
+    id: "G-manage",
+    type: "session",
+    status: "active",
+    taskId: "T-1",
+    decisionId: "D-manage",
+    fingerprint: intent.fingerprint,
+    ruleId: "gate.push_shared",
+    intent,
+    scope: authorizationGrants.intentScope(intent),
+  });
+  fs.writeFileSync(auditFile, `${JSON.stringify({
+    id: "A-1",
+    at: "2026-07-08T00:00:00.000Z",
+    event: "authorization.allow",
+    fingerprint: intent.fingerprint,
+  })}\n`);
+  try {
+    const overviewReq = new PassThrough();
+    overviewReq.method = "GET";
+    const overviewRes = responseRecorder();
+    const overviewHandled = httpAuthorizationRoutes.handleAuthorizationRoutes(
+      overviewReq,
+      overviewRes,
+      new URL("http://localhost/api/authorization/overview"),
+      {
+        ...authorizationRouteDeps(state),
+        authorizationAuditFile: auditFile,
+      },
+    );
+    assert.equal(await overviewHandled, true);
+    const overview = JSON.parse(overviewRes.body);
+    assert.equal(overview.grants.active, 1);
+    assert.equal(overview.decisions.total, 1);
+    assert.equal(overview.audit[0].event, "authorization.allow");
+    assert.equal(overview.policy.defaults.unknown_action, "gate");
+
+    const auditReq = new PassThrough();
+    auditReq.method = "GET";
+    const auditRes = responseRecorder();
+    const auditHandled = httpAuthorizationRoutes.handleAuthorizationRoutes(
+      auditReq,
+      auditRes,
+      new URL("http://localhost/api/authorization/audit?limit=10"),
+      {
+        ...authorizationRouteDeps(state),
+        authorizationAuditFile: auditFile,
+      },
+    );
+    assert.equal(await auditHandled, true);
+    assert.equal(JSON.parse(auditRes.body).audit[0].id, "A-1");
+
+    const revokeReq = new PassThrough();
+    revokeReq.method = "POST";
+    const revokeRes = responseRecorder();
+    const revokeHandled = httpAuthorizationRoutes.handleAuthorizationRoutes(
+      revokeReq,
+      revokeRes,
+      new URL("http://localhost/api/authorization/grants/G-manage/revoke"),
+      authorizationRouteDeps(state),
+    );
+    revokeReq.end(JSON.stringify({ reason: "manual test revoke" }));
+    assert.equal(await revokeHandled, true);
+    assert.equal(revokeRes.status, 200);
+    assert.equal(state.authorization.grants[0].status, "revoked");
+    assert.equal(state.authorization.audit[0].event, "authorization.grant.revoke");
+    assert.equal(state.events[0].type, "authorization.grant.revoke");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("network proxy runs authorization before outbound HTTP and strips credential headers", async () => {
   const gatedState = authorizationState();
   let transportCalls = 0;
@@ -691,6 +779,71 @@ test("MCP authorization_check fails closed when configured daemon is unreachable
   const payload = JSON.parse(result.content[0].text);
   assert.equal(payload.action, "deny");
   assert.equal(payload.ruleId, "deny.authorization_transport");
+});
+
+test("MCP authorized_http_request proxies through daemon authorization and preserves denials", async () => {
+  assert.equal(mcp.TOOLS.some((tool) => tool.name === "authorized_http_request"), true);
+  const requests = [];
+  const allowed = await mcp.callTool(
+    "authorized_http_request",
+    {
+      method: "POST",
+      url: "https://example.com/data",
+      taskId: "T-1",
+      headers: { Authorization: "Bearer stays-inside-agent-call" },
+      body: { ok: true },
+    },
+    {
+      daemonUrl: new URL("http://127.0.0.1:7317"),
+      daemonRequest: async (base, pathname, body) => {
+        requests.push({ base: base.href, pathname, body });
+        return {
+          ok: true,
+          authorization: { action: "allow", ruleId: "grant.G-http" },
+          response: { statusCode: 200, body: "ok" },
+        };
+      },
+    },
+  );
+  const allowedPayload = JSON.parse(allowed.content[0].text);
+  assert.equal(allowedPayload.authorization.action, "allow");
+  assert.equal(allowedPayload.response.body, "ok");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].pathname, "/api/proxy/http");
+  assert.equal(requests[0].body.tool, "HTTP");
+  assert.equal(requests[0].body.source, "Second MCP authorized HTTP proxy");
+  assert.equal(requests[0].body.taskId, "T-1");
+
+  const deniedError = new Error("daemon returned 403");
+  deniedError.response = {
+    authorization: {
+      action: "deny",
+      ruleId: "deny.expose_credentials",
+    },
+  };
+  const denied = await mcp.callTool(
+    "authorized_http_request",
+    { method: "GET", url: "https://example.com/secret", taskId: "T-1" },
+    {
+      daemonUrl: new URL("http://127.0.0.1:7317"),
+      daemonRequest: async () => {
+        throw deniedError;
+      },
+    },
+  );
+  const deniedPayload = JSON.parse(denied.content[0].text);
+  assert.equal(deniedPayload.authorization.action, "deny");
+  assert.equal(deniedPayload.authorization.ruleId, "deny.expose_credentials");
+
+  const transportFailure = await mcp.callTool(
+    "authorized_http_request",
+    { method: "GET", url: "https://example.com/data" },
+    { daemonUrl: null },
+  );
+  const transportPayload = JSON.parse(transportFailure.content[0].text);
+  assert.equal(transportPayload.action, "deny");
+  assert.equal(transportPayload.ruleId, "deny.authorization_transport");
+  assert.equal(transportPayload.source, "Second MCP authorized HTTP proxy");
 });
 
 test("Slack secret settings keep plaintext out of public config and preserve masked inputs", () => {

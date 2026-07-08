@@ -24,6 +24,15 @@ npm test
 
 授权相关测试优先放在 `test/phase1/authorization*.test.js` 或既有 `test/phase1/domain-http.test.js` 中;涉及前端的用例覆盖 Auth view render/action,涉及 hook 子进程的用例覆盖真实 stdin/stdout/exit code。
 
+### 0.1 本阶段范围调整:OS 级硬边界暂不实施
+
+本阶段完成口径收敛为**应用/daemon 层授权闭环**。以下两项继续保留为环境层 hardening 方向,但不作为当前实现阻塞项:
+
+- **daemon/agent 分离 OS 用户**:暂不创建独立 `second-daemon` / `second-agent` 系统用户,也不在本阶段依赖 OS ACL 来证明 agent 无法写授权文件。当前实现仍通过 daemon 授权引擎、deny 规则、profile 文件 owner-only mode 与 Codex env allowlist 降低风险。
+- **OS 层强制网络出口路由**:暂不配置 macOS `pf`、Linux firewall、container network namespace 或透明代理来强制所有 agent 出站流量经过 daemon。当前实现采用应用层边界:Codex raw network 默认关闭,UI 网络开关只注入 `SECOND_AUTH_PROXY`,外部 HTTP 通过 daemon `/api/proxy/http` 先授权再出网。
+
+因此,发布门槛中的"环境层强制"在当前阶段按"repo 内可实现的应用层强约束"验收;真正的 OS 用户隔离与网络出口强制路由记录在 `docs/known-limitations.md`,待后续部署形态明确后单独设计。
+
 ---
 
 ## 1. Phase A · 现状冻结与契约确认
@@ -464,7 +473,10 @@ npm test
 - 对无动作级拦截的 runtime:
   - 黄区能力整体降级为红区。
   - 敏感工具不直接暴露,只暴露 Second 代理工具。
-- MCP proxy 工具统一走 `/api/authorize`。
+- MCP proxy 工具统一走 daemon 授权路径:纯判定走 `/api/authorize`,代理 HTTP 走 `/api/proxy/http`。
+- 第一批具体 MCP 代理工具:
+  - `authorization_check`:只做 allow/gate/deny 判定,可 dry-run 或 enforce。
+  - `authorized_http_request`:出站 HTTP 代理,委托 daemon `/api/proxy/http`,gate/deny 时不触网。
 
 ### 测试验收
 
@@ -524,3 +536,33 @@ AUTHORIZATION.yml
 ```
 
 这个切片完成后,授权体系才真正从"能提醒 agent"变成"能被用户看懂且能强制执法"。Phase G 之后的加固和学习都应建立在这个闭环之上。
+
+---
+
+## 14. 当前实现状态 · 2026-07-08
+
+当前代码已经覆盖本计划的核心闭环,并已进入"应用/daemon 层可用,OS 级 hardening 后置"状态。
+
+| 阶段 | 状态 | 当前实现 |
+|---|---|---|
+| Phase A · 契约确认 | 已完成 | `docs/second-authorization-design.md` 与本文档定义 allow/gate/deny、intent、fingerprint、grant 与验收口径。 |
+| Phase B · 规则与引擎 | 已完成 | `server/authorization/policy-loader.js`、`engine.js`;默认 unknown gate,deny 优先于 grant/allow,规则加载失败 fail closed。 |
+| Phase C · 解析器与标签 | 已完成 | `intent-parser.js`、`labels.js`;覆盖 Bash、文件路径、secret/self-protection、push/deploy/install/outbound 等主要动作,解析不确定进入 unknown/gate。 |
+| Phase D · Authorization Lab | 已完成 | `/api/authorize` dry-run 与 `public/auth-view.js` Lab/授权控制台;前端只提交 payload、刷新 daemon 结果并触发管理动作,不复制策略判断。 |
+| Phase E · 正式执法与 hook | 已完成 | Codex `.codex/hooks/second_policy_hook.js` 调用 daemon `/api/authorize`;gate 创建/复用 decision,daemon 不可达时 hook fail closed。 |
+| Phase F · grant 账本 | 已完成 | `grants.js` 支持 once/session/plan;批准写 grant,重试由下一次授权检查消费/匹配,拒绝不产生 grant;授权页可撤销 active grant 并写审计。 |
+| Phase G · 审计与熔断 | 基本完成 | `AUTHORIZATION_AUDIT.log`、task trace 摘要、quota trip、grant consume/expire/revoke 与 prompt-injection deny 标记已落地;授权页可查看最近审计,更多 dogfood 告警策略可继续细化。 |
+| Phase H · 环境加固 | 应用层完成,OS 层后置 | Codex env allowlist 已落地,host secrets 不透传;profile 文件 best-effort `0700/0600`;raw network 默认关闭,网络经 `SECOND_AUTH_PROXY` 和 `/api/proxy/http` 授权代理。独立 OS 用户与 OS 出口强制路由暂不做。 |
+| Phase I · 计划/临时授权 | 已完成基础版 | session grant 与 structured plan grant 已实现;自然语言计划不会直接成为授权范围。 |
+| Phase J · 规则候选 | 已完成基础版 | `rule-candidates.js` 可从重复批准提取候选,用户确认后写入 `AUTHORIZATION.yml` green rule 并记录 lineage/audit。 |
+| Phase K · 多 runtime / MCP | 基础版完成 | runtime capability 已声明;Codex hooks 完整支持;MCP `authorization_check` 已接入 daemon 并 fail closed;`authorized_http_request` 已作为第一批具体敏感工具代理,其他领域 wrapper 仍有限。 |
+
+最近一次验证结果:
+
+```bash
+npm run check
+npm test
+git diff --check
+```
+
+三项均通过,测试数为 91 pass。当前剩余项不影响本阶段完成口径,主要是部署级 hardening 与更多 runtime/tool proxy 覆盖。

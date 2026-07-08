@@ -47,6 +47,8 @@
         rules: nextState.rules,
         authorization: nextState.authorization,
         authLab: ui.authLab,
+        authOverview: ui.authOverview,
+        authAudit: ui.authAudit,
       });
     }
     if (ui.view === "mobile") {

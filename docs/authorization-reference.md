@@ -56,6 +56,12 @@ Denied:
 
 `POST /api/authorize` accepts tool payloads from hooks, MCP, or Authorization Lab. Dry-run requests use `dryRun: true` or `mode: "dry_run"` and do not mutate state.
 
+The Authorization console also uses daemon-owned management endpoints:
+
+- `GET /api/authorization/overview`: effective policy summary, authorization decision summary, grant ledger summary, and recent audit events.
+- `GET /api/authorization/audit?limit=N`: recent authorization audit events.
+- `POST /api/authorization/grants/:id/revoke`: revoke an active grant and write `authorization.grant.revoke` audit/event records.
+
 The daemon normalizes each tool call into an intent:
 
 - `action`: `read`, `write`, `exec`, `communicate`, `push`, `deploy`, `install_package`, `system_change`, or `unknown`.
@@ -76,19 +82,23 @@ Approved authorization decisions create scoped grants:
 
 Rejected decisions create no grant. Deny rules are evaluated before grants, so a grant cannot override a red-zone action.
 
+Active grants can be revoked from the Authorization console. Revocation is not deletion: the grant status becomes `revoked`, and the audit trail remains available.
+
 ## Runtime Enforcement
 
 Each Codex run workspace receives `.codex/hooks.json`, `.codex/config.toml`, and the Second policy hook. The hook injects `SECOND_TASK_ID`, calls daemon `/api/authorize`, and fails closed when the daemon is unavailable or returns invalid data.
 
 When a decision is approved or rejected, Second resumes the captured Codex session if a session id was recorded.
 
-Runtimes declare authorization capability. Codex currently uses action-level hooks. No-hook runtimes are restricted: yellow-zone actions are treated as denied unless routed through a Second MCP proxy tool. The Decision MCP server exposes `authorization_check` for generic MCP authorization checks.
+Runtimes declare authorization capability. Codex currently uses action-level hooks. No-hook runtimes are restricted: yellow-zone actions are treated as denied unless routed through a Second MCP proxy tool. The Decision MCP server exposes `authorization_check` for generic MCP authorization checks and `authorized_http_request` as the first concrete sensitive-tool proxy.
 
 Profile authorization files are created with owner-only modes where the filesystem supports POSIX permissions: `.second/profile` is `0700`, and `AUTHORIZATION.yml`, `AUTHORIZATION.md`, `DECISIONS.log`, and `AUTHORIZATION_AUDIT.log` are `0600`. This is local hardening; a separate daemon OS user remains the stronger production boundary.
 
 ## Network Proxy
 
 `POST /api/proxy/http` is the daemon-owned outbound HTTP path. It accepts `method`, `url`, optional `headers`, optional `body`, and optional `taskId`, then calls the same authorization engine before any outbound request is made. Gate/deny responses do not touch the network.
+
+MCP-only runtimes should use `authorized_http_request` rather than direct network tools for outbound HTTP. The MCP tool delegates to `/api/proxy/http`, so authorization, grant consumption, audit logging, and credential-header stripping stay daemon-owned.
 
 Codex run environments receive `SECOND_AUTH_PROXY=<daemon>/api/proxy/http`. Agent-supplied credential headers such as `Authorization`, `Cookie`, and `X-Api-Key` are stripped; long-lived service credentials should stay inside daemon channel adapters or future credential proxy code, not inside agent context.
 

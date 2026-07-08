@@ -110,6 +110,21 @@ const TOOLS = [
       required: ["tool"],
     },
   },
+  {
+    name: "authorized_http_request",
+    description: `Make an outbound HTTP request through the ${PRODUCT_NAME} daemon authorization proxy. Gate/deny responses do not touch the network.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        method: { type: "string" },
+        url: { type: "string" },
+        headers: { type: "object" },
+        body: {},
+        taskId: { type: "string" },
+      },
+      required: ["url"],
+    },
+  },
 ];
 
 function serveMcp({ input = process.stdin, output = process.stdout } = {}) {
@@ -259,7 +274,32 @@ async function callTool(name, args, options = {}) {
     return textContent(JSON.stringify(result, null, 2));
   }
 
+  if (name === "authorized_http_request") {
+    return textContent(JSON.stringify(await callAuthorizedHttpRequest(args, options), null, 2));
+  }
+
   throw new Error(`Unknown tool: ${name}`);
+}
+
+async function callAuthorizedHttpRequest(args = {}, options = {}) {
+  const payload = {
+    method: args.method || "GET",
+    url: args.url,
+    headers: args.headers || {},
+    body: args.body,
+    taskId: args.taskId,
+    tool: "HTTP",
+    source: args.source || "Second MCP authorized HTTP proxy",
+  };
+  const base = Object.prototype.hasOwnProperty.call(options, "daemonUrl") ? options.daemonUrl : daemonUrl();
+  const requestDaemon = options.daemonRequest || daemonRequest;
+  if (!base) return authorizationTransportFailure(new Error("SECOND_DAEMON is not configured"), payload.source);
+  try {
+    return await requestDaemon(base, "/api/proxy/http", payload);
+  } catch (error) {
+    if (error.response) return error.response;
+    return authorizationTransportFailure(error, payload.source);
+  }
 }
 
 function tryDaemonRequest(pathname, payload) {
@@ -299,15 +339,21 @@ function daemonRequest(base, pathname, payload) {
           text += chunk;
         });
         res.on("end", () => {
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            reject(new Error(`${PRODUCT_NAME} daemon returned HTTP ${res.statusCode}: ${text}`));
-            return;
-          }
+          let parsed = null;
           try {
-            resolve(JSON.parse(text || "{}"));
+            parsed = text.trim() ? JSON.parse(text) : {};
           } catch (error) {
             reject(error);
+            return;
           }
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            const error = new Error(`${PRODUCT_NAME} daemon returned HTTP ${res.statusCode}: ${text}`);
+            error.statusCode = res.statusCode;
+            error.response = parsed;
+            reject(error);
+            return;
+          }
+          resolve(parsed);
         });
       },
     );
@@ -329,7 +375,7 @@ function textContent(text) {
   };
 }
 
-function authorizationTransportFailure(error) {
+function authorizationTransportFailure(error, source = "Second MCP authorization proxy") {
   return {
     ok: false,
     action: "deny",
@@ -337,7 +383,7 @@ function authorizationTransportFailure(error) {
     risk: "高",
     reason: `${PRODUCT_NAME} MCP authorization request failed closed: ${error.message}`,
     ruleId: "deny.authorization_transport",
-    source: "Second MCP authorization proxy",
+    source,
   };
 }
 

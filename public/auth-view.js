@@ -21,6 +21,7 @@
             <h1 style="margin:0;font-size:18px;font-weight:700">授权与记忆 · 三层模型</h1>
             <div class="page-subtitle" style="max-width:640px">「用户通常喜欢什么」与「agent 被授权做什么」严格分层 —— 偏好可被学习,规则候选自动提取,长期授权必须由你显式确认后才生效。</div>
             ${authorizationLab(state, ui)}
+            ${authorizationManagement(state, ui)}
             <div class="auth-grid">
               <div class="column-card">
                 <div class="column-head">
@@ -47,6 +48,180 @@
           </div>
         </div>
       `;
+    }
+
+    function authorizationManagement(state = {}, ui = {}) {
+      const overview = ui.authOverview || localAuthorizationOverview(state);
+      const policy = overview.policy || {};
+      const grants = overview.grants?.items || state.authorization?.grants || [];
+      const decisions = overview.decisions?.recent || (state.decisions || []).filter((decision) => decision.authorization).slice(0, 20);
+      const audit = ui.authAudit || overview.audit || state.authorization?.audit || [];
+      return `
+        <section class="column-card" style="margin:16px 0;border-color:#C8D6D0">
+          <div class="column-head" style="align-items:flex-start">
+            <div>
+              <div class="column-title">授权控制台 <span class="mono" style="font-size:10.5px;color:var(--faint);font-weight:600">daemon managed</span></div>
+              <div class="column-sub">查看有效规则、授权凭证、决策历史与审计日志; 管理动作由 daemon 执行并写审计。</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn" data-action="auth-overview-refresh" style="font-size:11px;padding:7px 10px;border-radius:6px">刷新授权状态</button>
+              <button class="btn" data-action="auth-audit-refresh" style="font-size:11px;padding:7px 10px;border-radius:6px">刷新审计</button>
+              <button class="btn" data-action="candidates-extract" style="font-size:11px;padding:7px 10px;border-radius:6px">提取规则候选</button>
+            </div>
+          </div>
+          ${authSummaryGrid(overview)}
+          <div style="padding:0 14px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px">
+            ${policyPanel(policy)}
+            ${grantPanel(grants)}
+            ${decisionPanel(decisions)}
+            ${auditPanel(audit)}
+          </div>
+        </section>
+      `;
+    }
+
+    function authSummaryGrid(overview = {}) {
+      const policy = overview.policy || {};
+      const grants = overview.grants || {};
+      const decisions = overview.decisions || {};
+      const audit = overview.audit || [];
+      return `
+        <div style="padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:10px">
+          ${summaryCard("Policy", policy.failedClosed ? "fail-closed" : "loaded", policy.source || "state snapshot", policy.failedClosed ? "risk-high" : "risk-low")}
+          ${summaryCard("Unknown", policy.defaults?.unknown_action || "gate", "默认未识别动作处理", policy.defaults?.unknown_action === "deny" ? "risk-high" : "risk-mid")}
+          ${summaryCard("Rules", `${policy.counts?.allow || 0}/${policy.counts?.gate || 0}/${policy.counts?.deny || 0}`, "allow / gate / deny", "risk-low")}
+          ${summaryCard("Grants", `${grants.active || 0} active`, `${grants.total || 0} total · ${grants.revoked || 0} revoked`, grants.active ? "risk-mid" : "risk-low")}
+          ${summaryCard("Decisions", `${decisions.pending || 0} pending`, `${decisions.total || 0} authorization decisions`, decisions.pending ? "risk-mid" : "risk-low")}
+          ${summaryCard("Audit", `${audit.length || 0} shown`, "最近授权事件", "risk-low")}
+        </div>
+      `;
+    }
+
+    function summaryCard(label, value, meta, cls) {
+      return `
+        <div class="memory-item" style="padding:10px 11px">
+          <div class="memory-source">${escapeHtml(label)}</div>
+          <div style="margin-top:5px"><span class="pill ${cls}">${escapeHtml(value)}</span></div>
+          <div class="memory-source" style="margin-top:6px">${escapeHtml(meta || "")}</div>
+        </div>
+      `;
+    }
+
+    function policyPanel(policy = {}) {
+      const rules = policy.rules || null;
+      return `
+        <div class="memory-item" style="padding:12px">
+          <div class="memory-text" style="font-weight:800">有效规则</div>
+          <div class="memory-source mono" style="margin-top:4px">${escapeHtml(policy.source || "点击刷新授权状态读取 AUTHORIZATION.yml")}</div>
+          ${policy.failedClosed ? `<div class="memory-source" style="color:var(--red);margin-top:7px">${escapeHtml(policy.error || "policy failed closed")}</div>` : ""}
+          ${rules ? `
+            ${ruleGroup("Allow", rules.allow || [], "risk-low")}
+            ${ruleGroup("Gate", rules.gate || [], "risk-mid")}
+            ${ruleGroup("Deny", rules.deny || [], "risk-high")}
+          ` : `<div class="memory-source" style="margin-top:8px">规则摘要在右侧三层模型中可见;点击刷新授权状态可读取 daemon 当前 effective policy。</div>`}
+        </div>
+      `;
+    }
+
+    function ruleGroup(label, rules = [], cls) {
+      return `
+        <details style="margin-top:10px" ${label !== "Allow" ? "open" : ""}>
+          <summary style="cursor:pointer;font-size:11px;font-weight:800;color:var(--muted)"><span class="pill ${cls}">${escapeHtml(label)}</span> ${rules.length}</summary>
+          <div style="display:grid;gap:7px;margin-top:8px">
+            ${rules.slice(0, 12).map((rule) => `
+              <div style="border:1px solid var(--line);border-radius:7px;padding:8px;background:#FFFDF8">
+                <div class="mono" style="font-size:11px;font-weight:800">${escapeHtml(rule.id || "")}</div>
+                <div class="memory-source" style="margin-top:4px">${escapeHtml(rule.reason || "")}</div>
+                <div class="memory-source mono" style="margin-top:4px">${escapeHtml(ruleBits(rule))}</div>
+              </div>
+            `).join("") || `<div class="memory-source">暂无 ${escapeHtml(label)} rules。</div>`}
+            ${rules.length > 12 ? `<div class="memory-source">另有 ${rules.length - 12} 条规则未展开。</div>` : ""}
+          </div>
+        </details>
+      `;
+    }
+
+    function ruleBits(rule = {}) {
+      return [
+        rule.action ? `action=${rule.action}` : "",
+        rule.scope ? `scope=${rule.scope}` : "",
+        rule.target ? `target=${Array.isArray(rule.target) ? rule.target.join(",") : rule.target}` : "",
+        rule.env ? `env=${Array.isArray(rule.env) ? rule.env.join(",") : rule.env}` : "",
+        rule.granularity ? `grant=${Array.isArray(rule.granularity) ? rule.granularity.join(",") : rule.granularity}` : "",
+        rule.risk_tag ? `risk=${Array.isArray(rule.risk_tag) ? rule.risk_tag.join(",") : rule.risk_tag}` : "",
+      ].filter(Boolean).join(" · ");
+    }
+
+    function grantPanel(grants = []) {
+      return `
+        <div class="memory-item" style="padding:12px">
+          <div class="memory-text" style="font-weight:800">Grant 管理</div>
+          <div class="memory-source" style="margin-top:4px">active grant 可撤销;consumed/expired/revoked 只保留审计。</div>
+          <div style="display:grid;gap:8px;margin-top:10px">
+            ${grants.slice(0, 12).map(managedGrantItem).join("") || `<div class="memory-source">暂无 grant。</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function managedGrantItem(grant = {}) {
+      const cls = grant.status === "active" ? "risk-low" : grant.status === "consumed" ? "risk-mid" : "risk-high";
+      return `
+        <div style="border:1px solid var(--line);border-radius:7px;padding:8px;background:#FFFDF8">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+            <div>
+              <span class="detail-id mono">${escapeHtml(grant.id)}</span>
+              <span class="pill ${cls}">${escapeHtml(grant.status || "unknown")}</span>
+              <span class="memory-source mono">${escapeHtml(grant.type || "grant")}</span>
+            </div>
+            ${grant.status === "active" ? `<button class="btn" data-action="authorization-grant-revoke" data-id="${escapeAttr(grant.id)}" style="font-size:10.5px;padding:5px 8px;border-radius:6px">撤销</button>` : ""}
+          </div>
+          <div class="memory-source mono" style="margin-top:5px">${escapeHtml(grant.fingerprint || "")}</div>
+          <div class="memory-source" style="margin-top:4px">${escapeHtml([grant.taskId, grant.decisionId, grant.ruleId].filter(Boolean).join(" · "))}</div>
+        </div>
+      `;
+    }
+
+    function decisionPanel(decisions = []) {
+      return `
+        <div class="memory-item" style="padding:12px">
+          <div class="memory-text" style="font-weight:800">授权决策历史</div>
+          <div style="display:grid;gap:8px;margin-top:10px">
+            ${decisions.slice(0, 12).map((decision) => `
+              <div style="border:1px solid var(--line);border-radius:7px;padding:8px;background:#FFFDF8">
+                <div><span class="detail-id mono">${escapeHtml(decision.id)}</span> <span class="pill ${decision.status === "pending" ? "risk-mid" : "risk-low"}">${escapeHtml(decision.status)}</span></div>
+                <div class="memory-source" style="margin-top:4px">${escapeHtml(decision.title || decision.taskId || "")}</div>
+                <div class="memory-source mono" style="margin-top:4px">${escapeHtml(decision.ruleId || decision.authorization?.ruleId || "")} · ${escapeHtml(decision.fingerprint || decision.authorization?.fingerprint || "")}</div>
+              </div>
+            `).join("") || `<div class="memory-source">暂无授权决策。</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function auditPanel(audit = []) {
+      return `
+        <div class="memory-item" style="padding:12px">
+          <div class="memory-text" style="font-weight:800">审计日志</div>
+          <div style="display:grid;gap:8px;margin-top:10px">
+            ${audit.slice(0, 12).map((entry) => `
+              <div style="border:1px solid var(--line);border-radius:7px;padding:8px;background:#FFFDF8">
+                <div><span class="pill ${auditClass(entry.event)}">${escapeHtml(entry.event || "authorization.audit")}</span></div>
+                <div class="memory-source mono" style="margin-top:5px">${escapeHtml(entry.at || entry.fingerprint || "")}</div>
+                <div class="memory-source" style="margin-top:4px">${escapeHtml([entry.ruleId, entry.grantId, entry.decisionId].filter(Boolean).join(" · "))}</div>
+                ${entry.reason ? `<div class="memory-source" style="margin-top:4px">${escapeHtml(entry.reason)}</div>` : ""}
+              </div>
+            `).join("") || `<div class="memory-source">暂无审计事件。</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function auditClass(event) {
+      const text = String(event || "");
+      if (text.includes(".deny") || text.includes(".revoke") || text.includes(".quota")) return "risk-high";
+      if (text.includes(".gate")) return "risk-mid";
+      return "risk-low";
     }
 
     function authorizationLab(state = {}, ui = {}) {
@@ -153,6 +328,38 @@
           <div class="memory-source mono" style="margin-top:5px">${escapeHtml(grant.fingerprint || "")}</div>
         </div>
       `;
+    }
+
+    function localAuthorizationOverview(state = {}) {
+      const decisions = (state.decisions || []).filter((decision) => decision.authorization);
+      const grants = state.authorization?.grants || [];
+      const audit = state.authorization?.audit || [];
+      const allow = (state.rules || []).filter((rule) => rule.kind === "允许").length;
+      const gate = (state.rules || []).filter((rule) => String(rule.kind || "").includes("Gate")).length;
+      const deny = (state.rules || []).filter((rule) => rule.kind === "拒绝").length;
+      return {
+        policy: {
+          source: "state snapshot",
+          failedClosed: false,
+          defaults: { unknown_action: "gate" },
+          counts: { allow, gate, deny },
+          rules: null,
+        },
+        decisions: {
+          total: decisions.length,
+          pending: decisions.filter((decision) => decision.status === "pending").length,
+          recent: decisions.slice(0, 20),
+        },
+        grants: {
+          total: grants.length,
+          active: grants.filter((grant) => grant.status === "active").length,
+          consumed: grants.filter((grant) => grant.status === "consumed").length,
+          expired: grants.filter((grant) => grant.status === "expired").length,
+          revoked: grants.filter((grant) => grant.status === "revoked").length,
+          items: grants,
+        },
+        audit,
+      };
     }
 
     function memoryItem(text, source) {

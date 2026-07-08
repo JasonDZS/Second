@@ -486,12 +486,18 @@ test("frontend auth view renders candidates and authorization rules", () => {
   });
   assert.match(html, /授权与记忆/);
   assert.match(html, /Authorization Lab/);
+  assert.match(html, /授权控制台/);
   assert.match(html, /data-action="auth-lab-submit"/);
+  assert.match(html, /data-action="auth-overview-refresh"/);
+  assert.match(html, /data-action="auth-audit-refresh"/);
+  assert.match(html, /data-action="authorization-grant-revoke"/);
   assert.match(html, /data-auth-lab-field="taskId"/);
   assert.match(html, /data-auth-lab-field="workspace"/);
   assert.match(html, /data-auth-lab-field="environment"/);
   assert.match(html, /deny\.expose_credentials/);
   assert.match(html, /Grant ledger/);
+  assert.match(html, /Grant 管理/);
+  assert.match(html, /审计日志/);
   assert.match(html, /data-action="candidate"/);
   assert.match(html, /生产变更必须审批/);
 });
@@ -1479,4 +1485,63 @@ test("frontend authorization lab submits dry-run requests to daemon API", async 
   await handler({ action: "auth-lab-example", example: "deny" });
   assert.equal(ui.authLab.input, "cat .env");
   assert.equal(ui.authLab.result, null);
+});
+
+test("frontend authorization console refreshes overview, audit, grants, and candidates", async () => {
+  const ui = {
+    authLab: { input: "rg TODO server" },
+    authOverview: null,
+    authAudit: null,
+  };
+  const calls = [];
+  let refreshes = 0;
+  let renders = 0;
+  const handler = actions.createActionHandler({
+    PRODUCT_NAME: "Second",
+    api: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url === "/api/authorization/overview") {
+        return {
+          policy: { defaults: { unknown_action: "gate" }, counts: { allow: 1, gate: 2, deny: 3 } },
+          grants: { active: 1, total: 1, items: [] },
+          decisions: { pending: 0, total: 0, recent: [] },
+          audit: [{ event: "authorization.allow" }],
+        };
+      }
+      if (url === "/api/authorization/audit?limit=100") return { audit: [{ event: "authorization.gate" }] };
+      if (url === "/api/candidates/extract") return { candidates: [{ id: "RC-1" }] };
+      return { grant: { id: "G-1", status: "revoked" } };
+    },
+    app: { querySelector: () => null },
+    currentProfileForm: () => ({}),
+    currentPublicAccessForm: () => ({}),
+    currentSlackForm: () => ({}),
+    getState: () => ({ decisions: [], integrations: {}, tasks: [] }),
+    profileFormFromState: () => ({}),
+    refresh: async () => {
+      refreshes += 1;
+    },
+    render: () => {
+      renders += 1;
+    },
+    showToast: () => {},
+    slackFormFromPublic: slackSettingsUi.slackFormFromPublic,
+    ui,
+    updateProfileModalPreview: () => {},
+  });
+
+  await handler({ action: "auth-overview-refresh" });
+  assert.equal(ui.authOverview.grants.active, 1);
+  assert.equal(ui.authAudit[0].event, "authorization.allow");
+
+  await handler({ action: "auth-audit-refresh" });
+  assert.equal(ui.authAudit[0].event, "authorization.gate");
+
+  await handler({ action: "authorization-grant-revoke", id: "G-1" });
+  assert.equal(calls.some((call) => call.url === "/api/authorization/grants/G-1/revoke"), true);
+
+  await handler({ action: "candidates-extract" });
+  assert.equal(calls.some((call) => call.url === "/api/candidates/extract"), true);
+  assert.equal(refreshes, 2);
+  assert.ok(renders >= 4);
 });

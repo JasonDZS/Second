@@ -311,6 +311,37 @@
           }
           ui.busy = false;
           render();
+        } else if (data.action === "auth-overview-refresh") {
+          ui.busy = "auth-overview";
+          render();
+          const result = await api("/api/authorization/overview");
+          ui.authOverview = result;
+          ui.authAudit = result.audit || ui.authAudit || [];
+          ui.busy = false;
+          showToast("授权状态已刷新");
+          render();
+        } else if (data.action === "auth-audit-refresh") {
+          ui.busy = "auth-audit";
+          render();
+          const result = await api("/api/authorization/audit?limit=100");
+          ui.authAudit = result.audit || [];
+          ui.busy = false;
+          showToast("授权审计已刷新");
+          render();
+        } else if (data.action === "authorization-grant-revoke") {
+          await api(`/api/authorization/grants/${encodeURIComponent(data.id)}/revoke`, {
+            method: "POST",
+            body: { reason: "Revoked from Authorization console." },
+          });
+          showToast("授权凭证已撤销");
+          await refresh();
+        } else if (data.action === "candidates-extract") {
+          const result = await api("/api/candidates/extract", {
+            method: "POST",
+            body: { minApprovals: 3 },
+          });
+          showToast(`已提取 ${result.candidates?.length || 0} 条规则候选`);
+          await refresh();
         } else if (data.action === "channel-toggle") {
           await api(`/api/channels/${encodeURIComponent(data.id)}`, {
             method: "POST",

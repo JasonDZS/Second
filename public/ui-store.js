@@ -43,6 +43,8 @@
         error: "",
       },
       onboardingChannel: "slack",
+      authOverview: null,
+      authAudit: null,
       onboardingStep: 0,
       onboardingAuthLevel: "balanced",
       onboardingMobileSkipped: false,

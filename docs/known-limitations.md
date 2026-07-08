@@ -3,10 +3,10 @@
 These are Phase 1 limitations, not Phase 2 feature requests.
 
 - Codex hook blocking depends on the installed Codex CLI honoring workspace `.codex/` hooks and rules.
-- Authorization now has a daemon-side `/api/authorize` path, intent parser, once/session/plan grants, audit log, fail-closed Codex hook, a generic MCP `authorization_check` proxy, and a daemon-owned `/api/proxy/http` outbound path, but OS-level multi-user file permissions and OS-enforced network egress routing are not yet implemented.
+- Authorization now has a daemon-side `/api/authorize` path, intent parser, once/session/plan grants, audit log, fail-closed Codex hook, MCP `authorization_check` / `authorized_http_request` tools, and a daemon-owned `/api/proxy/http` outbound path, but OS-level multi-user file permissions and OS-enforced network egress routing are not yet implemented.
 - Authorization Lab is a dry-run tester only; it does not create decisions, grants, or long-term rules.
 - Session/plan grants require structured decision payloads; free-form natural-language plans are intentionally not treated as authorization scope.
-- Runtime coverage is strongest for Codex hooks. MCP authorization proxy support exists, but concrete sensitive-tool wrappers for MCP-only runtimes are still limited.
+- Runtime coverage is strongest for Codex hooks. MCP authorization proxy support now includes outbound HTTP via `authorized_http_request`; concrete wrappers for other sensitive domains such as git hosting, package publishing, and infrastructure tools are still limited.
 - A hook-created decision can only resume automatically after Codex has emitted a resumable session id.
 - Docker Compose starts the daemon and console, but full Codex execution is best run on the host where the user is already logged in to Codex.
 - Slack decision cards now render decision options as buttons, but heavy evidence review still belongs in the localhost console.
