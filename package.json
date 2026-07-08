@@ -1,0 +1,23 @@
+{
+  "name": "second-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Second local decision console, daemon, and Codex CLI execution bridge.",
+  "main": "desktop/main.cjs",
+  "type": "commonjs",
+  "bin": {
+    "second": "./bin/second.js"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "doctor": "node bin/second.js doctor",
+    "desktop": "electron .",
+    "mcp": "node bin/second.js mcp serve",
+    "check": "node scripts/check-syntax.js",
+    "test": "node --test test/*.test.js test/phase1/*.test.js"
+  },
+  "devDependencies": {
+    "electron": "^37.4.0"
+  }
+}

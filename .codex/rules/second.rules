@@ -1,0 +1,41 @@
+prefix_rule(
+    pattern = ["rm"],
+    decision = "prompt",
+    justification = "Second requires review for destructive filesystem operations.",
+    match = ["rm file.txt", "rm -rf build"],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Remote git mutations must pass Second Human Gate.",
+    match = ["git push origin main"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "prompt",
+    justification = "Merging pull requests must pass Second Human Gate.",
+    match = ["gh pr merge 123 --squash"],
+)
+
+prefix_rule(
+    pattern = ["npm", "publish"],
+    decision = "prompt",
+    justification = "Package publishing must pass Second Human Gate.",
+    match = ["npm publish"],
+)
+
+prefix_rule(
+    pattern = ["psql"],
+    decision = "prompt",
+    justification = "Database access must pass Second policy review.",
+    match = ["psql postgres://example"],
+)
+
+prefix_rule(
+    pattern = ["kubectl"],
+    decision = "prompt",
+    justification = "Cluster mutations or reads may expose production state; route through Second approval.",
+    match = ["kubectl get pods"],
+)

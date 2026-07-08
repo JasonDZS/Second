@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#F3F1EC;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#1D1B17;}
+  a{color:#C4520E;text-decoration:none;}
+  a:hover{color:#9A3E08;}
+  *{box-sizing:border-box;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.14);border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+<div ref="{{rootRef}}" style="display:flex; height:100vh; overflow:hidden; background:#F3F1EC;">
+
+  <!-- ======= 侧边栏 ======= -->
+  <nav style="width:224px; flex:none; background:#191713; color:#E9E4DA; display:flex; flex-direction:column; padding:18px 12px 14px;">
+    <div style="display:flex; align-items:center; gap:10px; padding:4px 8px 18px;">
+      <div style="width:30px; height:30px; border-radius:8px; background:var(--accent,#D9560B); display:grid; place-items:center;">
+        <div style="width:14px; height:4px; border-radius:2px; background:#fff; transform:rotate(-45deg); box-shadow:0 -5px 0 rgba(255,255,255,.45), 0 5px 0 rgba(255,255,255,.45);"></div>
+      </div>
+      <div>
+        <div style="font-size:15px; font-weight:700; letter-spacing:.2px;">Second</div>
+        <div style="font-size:10px; color:rgba(233,228,218,.5); margin-top:1px;">人只做决策 · 经验永不离职</div>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <sc-for list="{{navItems}}" as="item" hint-placeholder-count="5">
+        <div onClick="{{item.go}}" style="display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; cursor:pointer; font-size:13px; background:{{item.bg}}; color:{{item.color}}; font-weight:{{item.weight}};" style-hover="background:rgba(255,255,255,.07)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="{{item.icon}}"></path></svg>
+          <span style="flex:1;">{{item.label}}</span>
+          <sc-if value="{{item.hasBadge}}" hint-placeholder-val="{{false}}">
+            <span style="font-size:10.5px; font-weight:700; background:var(--accent,#D9560B); color:#fff; border-radius:9px; padding:1px 7px;">{{item.badge}}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="flex:1;"></div>
+    <div style="border:1px solid rgba(255,255,255,.09); border-radius:10px; padding:10px 12px; margin-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600;">
+        <span style="width:7px; height:7px; border-radius:50%; background:#3FBF7F; animation:pulse 2s infinite;"></span>
+        本地 daemon 在线
+      </div>
+      <div style="font-size:11px; color:rgba(233,228,218,.5); margin-top:5px; line-height:1.6;">{{daemonAdapter}} adapter · 已连接<br>heartbeat 3 秒前 · run 队列 2</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:9px; padding:6px 8px;">
+      <div style="width:28px; height:28px; border-radius:50%; background:#3C3830; display:grid; place-items:center; font-size:12px; font-weight:700; color:#E9E4DA;">李</div>
+      <div>
+        <div style="font-size:12.5px; font-weight:600;">李哲</div>
+        <div style="font-size:10.5px; color:rgba(233,228,218,.5);">分身在岗 · 授权 12 条</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ======= 主区 ======= -->
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;">
+
+    <!-- ============ 决策收件箱 ============ -->
+    <sc-if value="{{isInbox}}" hint-placeholder-val="{{true}}">
+      <div style="display:flex; flex:1; min-height:0;">
+        <!-- 列表 -->
+        <div style="width:372px; flex:none; border-right:1px solid #E2DDD2; display:flex; flex-direction:column; background:#F8F6F1;">
+          <div style="padding:20px 20px 12px;">
+            <div style="display:flex; align-items:baseline; gap:8px;">
+              <h1 style="margin:0; font-size:18px; font-weight:700;">决策收件箱</h1>
+              <span style="font-size:12px; font-weight:700; color:var(--accent,#D9560B);">{{pendingCount}} 待决策</span>
+            </div>
+            <div style="font-size:12px; color:#8A8474; margin-top:4px;">所有 agent 的决策请求,汇聚一处 · Decision MCP</div>
+          </div>
+          <div style="flex:1; overflow-y:auto; padding:4px 12px 16px; display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{decisionList}}" as="d" hint-placeholder-count="4">
+              <div onClick="{{d.go}}" style="border:1px solid {{d.borderCol}}; background:{{d.bg}}; border-radius:10px; padding:var(--rowpad,13px) 14px; cursor:pointer; animation:fadeUp .25s ease both;" style-hover="border-color:#C9C2B2">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:10px; font-weight:700; letter-spacing:.4px; color:#6E6858; background:#EDE9DF; border:1px solid #E0DACB; border-radius:4px; padding:2px 6px;">{{d.typeLabel}}</span>
+                  <span style="font-size:10px; font-weight:700; color:{{d.riskC}}; background:{{d.riskBg}}; border-radius:4px; padding:2px 6px;">{{d.risk}}风险</span>
+                  <span style="flex:1;"></span>
+                  <span style="font-size:10.5px; color:#9B9584;">{{d.time}}</span>
+                </div>
+                <div style="font-size:13.5px; font-weight:650; margin-top:8px; line-height:1.45;">{{d.title}}</div>
+                <div style="font-size:11.5px; color:#8A8474; margin-top:5px;">{{d.source}} → {{d.agent}}</div>
+                <div style="margin-top:8px; display:flex; align-items:center; gap:6px;">
+                  <span style="width:6px; height:6px; border-radius:50%; background:{{d.stC}};"></span>
+                  <span style="font-size:11px; font-weight:600; color:{{d.stC}};">{{d.stLabel}}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <!-- 证据包详情 -->
+        <div style="flex:1; min-width:0; overflow-y:auto; padding:26px 34px 40px;">
+          <div style="max-width:760px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; font-weight:700; color:#6E6858;">{{det.num}}</span>
+              <span style="font-size:10.5px; font-weight:700; letter-spacing:.4px; color:#6E6858; background:#EDE9DF; border:1px solid #E0DACB; border-radius:4px; padding:2px 7px;">{{det.typeLabel}}</span>
+              <span style="font-size:10.5px; font-weight:700; color:{{det.riskC}}; background:{{det.riskBg}}; border-radius:4px; padding:2px 7px;">{{det.risk}}风险</span>
+            </div>
+            <h2 style="margin:10px 0 0; font-size:22px; font-weight:750; letter-spacing:-.2px;">{{det.title}}</h2>
+            <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:12px; font-size:12px; color:#6E6858;">
+              <span>链路&nbsp; <b style="color:#1D1B17; font-weight:600;">{{det.source}} → {{det.agent}} → 本地 runtime</b></span>
+              <span>任务&nbsp; <b style="color:#1D1B17; font-weight:600;">{{det.task}}</b></span>
+              <span>引擎&nbsp; <b style="color:#1D1B17; font-weight:600;">{{det.engine}}</b></span>
+            </div>
+
+            <sc-if value="{{det.decided}}" hint-placeholder-val="{{false}}">
+              <div style="margin-top:18px; border:1px solid {{det.bannerBorder}}; background:{{det.bannerBg}}; border-radius:10px; padding:13px 16px; font-size:13px; font-weight:600; color:{{det.bannerC}}; animation:fadeUp .3s ease;">{{det.bannerText}}</div>
+            </sc-if>
+
+            <div style="margin-top:22px; border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:18px 20px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">背景 · 分身的说明</div>
+              <p style="margin:9px 0 0; font-size:13.5px; line-height:1.75; color:#3A362E;">{{det.background}}</p>
+            </div>
+
+            <div style="margin-top:14px; border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:18px 20px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">影响范围</div>
+              <div style="margin-top:10px; display:flex; flex-direction:column; gap:7px;">
+                <sc-for list="{{det.impact}}" as="it" hint-placeholder-count="3">
+                  <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#3A362E; background:#F1EDE3; border-radius:6px; padding:7px 10px;">{{it.text}}</div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="margin-top:14px; border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:18px 20px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">方案 · 点击选择</div>
+              <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+                <sc-for list="{{det.options}}" as="op" hint-placeholder-count="3">
+                  <div onClick="{{op.pick}}" style="display:flex; gap:11px; align-items:flex-start; border:1.5px solid {{op.borderCol}}; background:{{op.bg}}; border-radius:10px; padding:12px 14px; cursor:pointer;">
+                    <div style="width:16px; height:16px; flex:none; margin-top:1px; border-radius:50%; border:1.5px solid {{op.dotBorder}}; display:grid; place-items:center;">
+                      <div style="width:8px; height:8px; border-radius:50%; background:{{op.dotFill}};"></div>
+                    </div>
+                    <div style="flex:1;">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:13px; font-weight:650;">{{op.label}}</span>
+                        <sc-if value="{{op.rec}}" hint-placeholder-val="{{false}}">
+                          <span style="font-size:10px; font-weight:700; color:var(--accent,#D9560B); background:rgba(217,86,11,.1); border-radius:4px; padding:1.5px 6px;">分身推荐</span>
+                        </sc-if>
+                      </div>
+                      <div style="font-size:12px; color:#8A8474; margin-top:3px; line-height:1.5;">{{op.desc}}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="margin-top:14px; border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:16px 20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584; width:100%;">产物与证据链</div>
+              <sc-for list="{{det.artifacts}}" as="ar" hint-placeholder-count="3">
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11.5px; color:#4A4638; border:1px solid #E0DACB; background:#F1EDE3; border-radius:6px; padding:5px 9px;">{{ar.text}}</span>
+              </sc-for>
+              <span onClick="{{det.goTrace}}" style="font-size:12px; font-weight:650; color:var(--accent,#D9560B); cursor:pointer; padding:5px 4px;" style-hover="text-decoration:underline">查看完整 Trace →</span>
+            </div>
+
+            <sc-if value="{{det.pending}}" hint-placeholder-val="{{true}}">
+              <div style="margin-top:20px; display:flex; gap:10px; align-items:center;">
+                <button onClick="{{det.approve}}" style="border:none; cursor:pointer; background:var(--accent,#D9560B); color:#fff; font-size:13.5px; font-weight:700; border-radius:9px; padding:11px 22px; font-family:inherit;" style-hover="filter:brightness(.94)">批准 · 恢复任务</button>
+                <button onClick="{{det.reject}}" style="cursor:pointer; background:#fff; color:#B42318; font-size:13.5px; font-weight:650; border:1px solid #E0DACB; border-radius:9px; padding:10px 20px; font-family:inherit;" style-hover="border-color:#B42318">拒绝</button>
+                <button onClick="{{det.askMore}}" style="cursor:pointer; background:transparent; color:#6E6858; font-size:13px; font-weight:600; border:none; padding:10px 12px; font-family:inherit;" style-hover="color:#1D1B17">需要更多信息</button>
+                <span style="flex:1;"></span>
+                <span style="font-size:11.5px; color:#9B9584;">决策将经 Decision MCP 回传,任务可恢复地继续执行</span>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ 任务与 Trace ============ -->
+    <sc-if value="{{isTasks}}" hint-placeholder-val="{{false}}">
+      <div style="display:flex; flex:1; min-height:0;">
+        <div style="width:340px; flex:none; border-right:1px solid #E2DDD2; display:flex; flex-direction:column; background:#F8F6F1;">
+          <div style="padding:20px 20px 12px;">
+            <h1 style="margin:0; font-size:18px; font-weight:700;">任务与 Trace</h1>
+            <div style="font-size:12px; color:#8A8474; margin-top:4px;">从入口到回传的完整血缘,跟着 agent 走</div>
+          </div>
+          <div style="flex:1; overflow-y:auto; padding:4px 12px 16px; display:flex; flex-direction:column; gap:8px;">
+            <sc-for list="{{taskList}}" as="t" hint-placeholder-count="4">
+              <div onClick="{{t.go}}" style="border:1px solid {{t.borderCol}}; background:{{t.bg}}; border-radius:10px; padding:var(--rowpad,13px) 14px; cursor:pointer;" style-hover="border-color:#C9C2B2">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; font-weight:700; color:#6E6858;">{{t.num}}</span>
+                  <span style="flex:1;"></span>
+                  <span style="font-size:11px; font-weight:700; color:{{t.stC}}; background:{{t.stBg}}; border-radius:4px; padding:2px 8px;">{{t.stLabel}}</span>
+                </div>
+                <div style="font-size:13.5px; font-weight:650; margin-top:7px;">{{t.title}}</div>
+                <div style="font-size:11.5px; color:#8A8474; margin-top:5px;">{{t.entry}} · {{t.agent}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:1; min-width:0; overflow-y:auto; padding:26px 34px 48px;">
+          <div style="max-width:720px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:9px;">
+                  <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; font-weight:700; color:#6E6858;">{{tdet.num}}</span>
+                  <span style="font-size:11px; font-weight:700; color:{{tdet.stC}}; background:{{tdet.stBg}}; border-radius:4px; padding:2px 8px;">{{tdet.stLabel}}</span>
+                </div>
+                <h2 style="margin:8px 0 0; font-size:21px; font-weight:750;">{{tdet.title}}</h2>
+                <div style="font-size:12px; color:#6E6858; margin-top:7px;">{{tdet.entry}} 发起 · {{tdet.agent}} 接管 · {{tdet.engine}} · workspace <span style="font-family:ui-monospace,Menlo,monospace;">{{tdet.worktree}}</span></div>
+              </div>
+              <button onClick="{{playTrace}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#1D1B17; font-size:12.5px; font-weight:650; border-radius:8px; padding:9px 16px; font-family:inherit; flex:none;" style-hover="border-color:var(--accent,#D9560B); color:var(--accent,#D9560B)">{{playLabel}}</button>
+            </div>
+            <div style="margin-top:24px; display:flex; flex-direction:column;">
+              <sc-for list="{{traceEvents}}" as="ev" hint-placeholder-count="5">
+                <div style="display:flex; gap:14px; opacity:{{ev.op}}; transition:opacity .35s ease;">
+                  <div style="display:flex; flex-direction:column; align-items:center; width:14px; flex:none;">
+                    <div style="width:12px; height:12px; border-radius:50%; background:{{ev.dot}}; border:3px solid {{ev.dotRing}}; flex:none; margin-top:3px;"></div>
+                    <sc-if value="{{ev.notLast}}" hint-placeholder-val="{{true}}">
+                      <div style="width:2px; flex:1; background:#E2DDD2; min-height:26px;"></div>
+                    </sc-if>
+                  </div>
+                  <div style="flex:1; padding-bottom:18px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="font-size:10.5px; font-weight:700; color:{{ev.actorC}}; background:{{ev.actorBg}}; border-radius:4px; padding:2px 7px;">{{ev.actor}}</span>
+                      <span style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#9B9584;">{{ev.time}}</span>
+                    </div>
+                    <div style="font-size:13.5px; font-weight:650; margin-top:6px;">{{ev.title}}</div>
+                    <div style="font-size:12.5px; color:#6E6858; margin-top:3px; line-height:1.65;">{{ev.desc}}</div>
+                    <sc-if value="{{ev.hasMeta}}" hint-placeholder-val="{{false}}">
+                      <div style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#4A4638; background:#F1EDE3; border-radius:6px; padding:6px 10px; margin-top:7px; display:inline-block;">{{ev.meta}}</div>
+                    </sc-if>
+                    <sc-if value="{{ev.hasLink}}" hint-placeholder-val="{{false}}">
+                      <div onClick="{{ev.onLink}}" style="font-size:12px; font-weight:650; color:var(--accent,#D9560B); cursor:pointer; margin-top:7px; display:inline-block;" style-hover="text-decoration:underline">{{ev.linkLabel}} →</div>
+                    </sc-if>
+                    <sc-if value="{{ev.hasExec}}" hint-placeholder-val="{{false}}">
+                      <div onClick="{{ev.toggleExec}}" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:650; color:#6E6858; cursor:pointer; margin-top:8px; border:1px solid #E0DACB; background:#FCFBF8; border-radius:6px; padding:4.5px 10px; user-select:none;" style-hover="border-color:var(--accent,#D9560B); color:var(--accent,#D9560B)">
+                        <span style="display:inline-block; font-size:9px; transform:rotate({{ev.chev}}deg); transition:transform .2s ease;">▶</span>
+                        <span>{{ev.execLabel}}</span>
+                      </div>
+                      <sc-if value="{{ev.execOpen}}" hint-placeholder-val="{{false}}">
+                        <div style="margin-top:9px; background:#23211C; border:1px solid #38352D; border-radius:10px; overflow:hidden;">
+                          <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #38352D;">
+                            <span style="width:7px; height:7px; border-radius:50%; background:#3FBF7F; flex:none;"></span>
+                            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:10.5px; color:rgba(233,228,218,.55);">{{ev.execHead}}</span>
+                          </div>
+                          <div style="padding:10px 12px; display:flex; flex-direction:column; gap:7px;">
+                            <sc-for list="{{ev.execSteps}}" as="st" hint-placeholder-count="4">
+                              <div style="display:flex; align-items:baseline; gap:10px;">
+                                <span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; color:rgba(233,228,218,.35); width:34px; flex:none;">{{st.t}}</span>
+                                <span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; font-weight:700; color:{{st.tc}}; background:rgba(255,255,255,.06); border-radius:4px; padding:1.5px 7px; flex:none; width:44px; text-align:center;">{{st.tool}}</span>
+                                <span style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:rgba(233,228,218,.85); line-height:1.6; flex:1; min-width:0;">{{st.text}}</span>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ 运行时 · 玻璃机房 ============ -->
+    <sc-if value="{{isRuntime}}" hint-placeholder-val="{{false}}">
+      <div style="flex:1; overflow-y:auto; padding:26px 34px 48px;">
+        <div style="max-width:980px;">
+          <div style="display:flex; align-items:flex-start; gap:12px;">
+            <div style="flex:1;">
+              <h1 style="margin:0; font-size:18px; font-weight:700;">运行时 · 玻璃机房</h1>
+              <div style="font-size:12px; color:#8A8474; margin-top:4px;">本地 daemon 正在做什么、动了哪些文件,实时可见、随时可停</div>
+            </div>
+            <button onClick="{{emergencyStop}}" style="cursor:pointer; border:1px solid #F4C1B8; background:#FEF0ED; color:#B42318; font-size:12.5px; font-weight:700; border-radius:8px; padding:9px 16px; font-family:inherit;" style-hover="background:#FDE2DC">紧急全停</button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px;">
+            <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:16px 18px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">DAEMON</div>
+              <div style="display:flex; align-items:center; gap:7px; margin-top:9px; font-size:15px; font-weight:700;"><span style="width:8px; height:8px; border-radius:50%; background:#3FBF7F; animation:pulse 2s infinite;"></span>在线</div>
+              <div style="font-size:11.5px; color:#8A8474; margin-top:6px; line-height:1.6;">uptime 6d 14h · heartbeat 3s 前<br>second-daemon v0.4.2 · localhost:7317</div>
+            </div>
+            <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:16px 18px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">执行引擎</div>
+              <div style="font-size:13px; font-weight:650; margin-top:9px;">Claude Code <span style="font-size:10.5px; font-weight:700; color:#067647; background:#DCFAE6; border-radius:4px; padding:1.5px 6px; margin-left:4px;">已连接</span></div>
+              <div style="font-size:13px; font-weight:650; margin-top:6px; color:#9B9584;">Codex CLI <span style="font-size:10.5px; font-weight:700; color:#6E6858; background:#EDE9DF; border-radius:4px; padding:1.5px 6px; margin-left:4px;">未启用</span></div>
+              <div style="font-size:11.5px; color:#8A8474; margin-top:7px;">adapter 可替换 · hooks 已接授权层</div>
+            </div>
+            <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:16px 18px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">今日</div>
+              <div style="display:flex; gap:18px; margin-top:9px;">
+                <div><div style="font-size:20px; font-weight:750;">12</div><div style="font-size:11px; color:#8A8474;">任务</div></div>
+                <div><div style="font-size:20px; font-weight:750;">3</div><div style="font-size:11px; color:#8A8474;">决策</div></div>
+                <div><div style="font-size:20px; font-weight:750; color:#B42318;">1</div><div style="font-size:11px; color:#8A8474;">越权拦截</div></div>
+              </div>
+              <div style="font-size:11.5px; color:#8A8474; margin-top:8px;">决策延迟中位数 4m 12s</div>
+            </div>
+          </div>
+
+          <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; margin-top:14px; overflow:hidden;">
+            <div style="display:flex; align-items:baseline; gap:8px; padding:14px 18px 10px;">
+              <span style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">正在运行的任务</span>
+              <span style="font-size:11px; color:#B9B29F;">每个任务绑定一个 runtime session · 点击行展开</span>
+            </div>
+            <sc-for list="{{runRows}}" as="r" hint-placeholder-count="3">
+              <div style="border-top:1px solid #EFEBE1;">
+                <div onClick="{{r.openSess}}" style="display:flex; align-items:center; gap:14px; padding:13px 18px; cursor:pointer; background:{{r.rowBg}};" style-hover="background:#F6F3EC">
+                  <span style="display:inline-block; font-size:9px; color:#9B9584; transform:rotate({{r.chev}}deg); transition:transform .2s ease; flex:none;">▶</span>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:13px; font-weight:650;">{{r.title}}</div>
+                    <div style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#8A8474; margin-top:3px;">{{r.meta}}</div>
+                  </div>
+                  <span style="font-size:11px; font-weight:700; color:{{r.stC}}; background:{{r.stBg}}; border-radius:4px; padding:2.5px 9px; flex:none;">{{r.stLabel}}</span>
+                  <span style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#6E6858; flex:none;">{{r.files}}</span>
+                  <button onClick="{{r.toggle}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#1D1B17; font-size:11.5px; font-weight:650; border-radius:7px; padding:6px 12px; font-family:inherit; flex:none;" style-hover="border-color:#B0A890">{{r.btnLabel}}</button>
+                  <button onClick="{{r.stop}}" style="cursor:pointer; border:1px solid #F4C1B8; background:#fff; color:#B42318; font-size:11.5px; font-weight:650; border-radius:7px; padding:6px 12px; font-family:inherit; flex:none;" style-hover="background:#FEF0ED">停止</button>
+                </div>
+                <sc-if value="{{r.open}}" hint-placeholder-val="{{false}}">
+                  <div style="margin:0 18px 14px 41px; border:1px solid #E0DACB; background:#FFFFFF; border-radius:10px; overflow:hidden; animation:fadeUp .2s ease;">
+                    <div style="display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid #EFEBE1; background:#FCFBF8;">
+                      <span style="width:7px; height:7px; border-radius:50%; background:{{r.sessDotC}}; flex:none;"></span>
+                      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11.5px; font-weight:700; color:#3A362E;">{{r.sessId}}</span>
+                      <span style="font-size:10.5px; font-weight:700; color:{{r.stC}}; background:{{r.stBg}}; border-radius:4px; padding:1.5px 7px;">{{r.stLabel}}</span>
+                      <span style="flex:1;"></span>
+                      <span style="font-size:10.5px; color:#9B9584;">runtime session</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:11px 14px; padding:12px 14px; border-bottom:1px solid #EFEBE1;">
+                      <sc-for list="{{r.sessMeta}}" as="mi" hint-placeholder-count="4">
+                        <div style="min-width:0;">
+                          <div style="font-size:10px; font-weight:700; letter-spacing:.6px; color:#9B9584;">{{mi.k}}</div>
+                          <div style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#3A362E; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{mi.v}}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="padding:11px 14px 13px;">
+                      <div style="font-size:10px; font-weight:700; letter-spacing:.6px; color:#9B9584;">历史事件 · {{r.evCount}} 条</div>
+                      <div style="margin-top:8px; max-height:230px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+                        <sc-for list="{{r.sessEvents}}" as="se" hint-placeholder-count="6">
+                          <div style="display:flex; align-items:baseline; gap:9px;">
+                            <span style="font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:#9B9584; width:56px; flex:none;">{{se.t}}</span>
+                            <span style="font-size:10px; font-weight:700; color:{{se.kc}}; background:{{se.kbg}}; border-radius:4px; padding:1.5px 0; flex:none; width:38px; text-align:center;">{{se.k}}</span>
+                            <span style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#3A362E; line-height:1.6; flex:1; min-width:0;">{{se.text}}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
+            <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; padding:16px 18px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">文件活动</div>
+              <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+                <sc-for list="{{fileActs}}" as="f" hint-placeholder-count="4">
+                  <div style="display:flex; align-items:center; gap:8px; font-family:ui-monospace,Menlo,monospace; font-size:11.5px;">
+                    <span style="font-size:10px; font-weight:700; color:{{f.opC}}; background:{{f.opBg}}; border-radius:4px; padding:1.5px 6px; flex:none; font-family:inherit;">{{f.op}}</span>
+                    <span style="color:#3A362E; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{f.path}}</span>
+                    <span style="flex:1;"></span>
+                    <span style="color:#9B9584; flex:none;">{{f.run}}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="border:1px solid #2A2620; background:#1E1C18; border-radius:12px; padding:16px 18px;">
+              <div style="font-size:11px; font-weight:700; letter-spacing:.8px; color:rgba(233,228,218,.45);">事件日志</div>
+              <div style="margin-top:10px; display:flex; flex-direction:column; gap:5px; font-family:ui-monospace,Menlo,monospace; font-size:11px; line-height:1.65;">
+                <sc-for list="{{logLines}}" as="l" hint-placeholder-count="6">
+                  <div style="color:{{l.c}};">{{l.text}}</div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ 授权与记忆 ============ -->
+    <sc-if value="{{isAuth}}" hint-placeholder-val="{{false}}">
+      <div style="flex:1; overflow-y:auto; padding:26px 34px 48px;">
+        <div style="max-width:1080px;">
+          <h1 style="margin:0; font-size:18px; font-weight:700;">授权与记忆 · 三层模型</h1>
+          <div style="font-size:12.5px; color:#8A8474; margin-top:5px; max-width:640px; line-height:1.7;">「用户通常喜欢什么」与「agent 被授权做什么」严格分层 —— 偏好可被学习,规则候选自动提取,长期授权必须由你显式确认后才生效。</div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:20px; align-items:start;">
+            <!-- 偏好 -->
+            <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; overflow:hidden;">
+              <div style="padding:14px 16px; border-bottom:1px solid #EFEBE1;">
+                <div style="font-size:13px; font-weight:700;">① 偏好 <span style="font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:#9B9584; font-weight:600;">PREFERENCES.md</span></div>
+                <div style="font-size:11.5px; color:#8A8474; margin-top:3px;">可被学习与引用 · 不构成授权</div>
+              </div>
+              <div style="padding:12px 14px; display:flex; flex-direction:column; gap:8px;">
+                <sc-for list="{{prefs}}" as="p" hint-placeholder-count="3">
+                  <div style="border:1px solid #EFEBE1; background:#fff; border-radius:8px; padding:10px 12px;">
+                    <div style="font-size:12.5px; font-weight:600; line-height:1.5;">{{p.text}}</div>
+                    <div style="font-size:10.5px; color:#9B9584; margin-top:4px;">{{p.src}}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <!-- 规则候选 -->
+            <div style="border:1px solid #EAD9A8; background:#FBF7EA; border-radius:12px; overflow:hidden;">
+              <div style="padding:14px 16px; border-bottom:1px solid #F0E6C8;">
+                <div style="font-size:13px; font-weight:700;">② 规则候选 <span style="font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:#A8925A; font-weight:600;">RULE_CANDIDATES</span></div>
+                <div style="font-size:11.5px; color:#A8925A; margin-top:3px;">从重复任务与决策历史自动提取 · 等你确认</div>
+              </div>
+              <div style="padding:12px 14px; display:flex; flex-direction:column; gap:8px;">
+                <sc-for list="{{cands}}" as="c" hint-placeholder-count="2">
+                  <div style="border:1px solid #F0E6C8; background:#fff; border-radius:8px; padding:11px 12px; opacity:{{c.op}};">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; font-weight:700; color:#A8925A;">{{c.num}}</span>
+                      <span style="font-size:10px; font-weight:700; color:#B54708; background:#FEF0C7; border-radius:4px; padding:1.5px 6px;">置信 {{c.conf}}</span>
+                    </div>
+                    <div style="font-size:12.5px; font-weight:600; line-height:1.5; margin-top:6px;">{{c.text}}</div>
+                    <div style="font-size:10.5px; color:#9B9584; margin-top:4px;">{{c.src}}</div>
+                    <sc-if value="{{c.actionable}}" hint-placeholder-val="{{true}}">
+                      <div style="display:flex; gap:7px; margin-top:9px;">
+                        <button onClick="{{c.promote}}" style="cursor:pointer; border:none; background:var(--accent,#D9560B); color:#fff; font-size:11px; font-weight:700; border-radius:6px; padding:6px 11px; font-family:inherit;" style-hover="filter:brightness(.94)">确认为授权规则</button>
+                        <button onClick="{{c.ignore}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#6E6858; font-size:11px; font-weight:600; border-radius:6px; padding:6px 11px; font-family:inherit;" style-hover="color:#1D1B17">忽略</button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{c.done}}" hint-placeholder-val="{{false}}">
+                      <div style="font-size:11px; font-weight:700; color:{{c.doneC}}; margin-top:8px;">{{c.doneLabel}}</div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <!-- 授权规则 -->
+            <div style="border:1px solid #CFE0D4; background:#F2F8F3; border-radius:12px; overflow:hidden;">
+              <div style="padding:14px 16px; border-bottom:1px solid #DEEBE1;">
+                <div style="font-size:13px; font-weight:700;">③ 授权规则 <span style="font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:#5E8A6B; font-weight:600;">AUTHORIZATION</span></div>
+                <div style="font-size:11.5px; color:#5E8A6B; margin-top:3px;">经决策中心显式确认 · 越界即进 Human Gate</div>
+              </div>
+              <div style="padding:12px 14px; display:flex; flex-direction:column; gap:8px;">
+                <sc-for list="{{rules}}" as="r" hint-placeholder-count="3">
+                  <div style="border:1px solid {{r.borderCol}}; background:#fff; border-radius:8px; padding:11px 12px; animation:fadeUp .3s ease both;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-size:10px; font-weight:700; color:{{r.tagC}}; background:{{r.tagBg}}; border-radius:4px; padding:1.5px 6px;">{{r.tag}}</span>
+                      <sc-if value="{{r.isNew}}" hint-placeholder-val="{{false}}">
+                        <span style="font-size:10px; font-weight:700; color:var(--accent,#D9560B);">刚刚生效</span>
+                      </sc-if>
+                    </div>
+                    <div style="font-size:12.5px; font-weight:600; line-height:1.5; margin-top:6px;">{{r.text}}</div>
+                    <div style="font-size:10.5px; color:#9B9584; margin-top:4px;">{{r.src}}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ 轻决策 · 手机与消息端 ============ -->
+    <sc-if value="{{isMobile}}" hint-placeholder-val="{{false}}">
+      <div style="flex:1; overflow-y:auto; padding:26px 34px 48px;">
+        <div style="max-width:980px;">
+          <h1 style="margin:0; font-size:18px; font-weight:700;">轻决策 · 决策去人所在处</h1>
+          <div style="font-size:12.5px; color:#8A8474; margin-top:5px; max-width:620px; line-height:1.7;">日常轻决策不回桌面:带按钮的消息直接出现在 Slack,人不在电脑前时由手机推送兜底。在这里点批准,收件箱与任务同步更新。</div>
+          <div style="display:flex; gap:40px; margin-top:26px; align-items:flex-start; flex-wrap:wrap;">
+            <!-- 手机 -->
+            <div style="flex:none;">
+              <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{true}}" title="" hint-size="300px,620px">
+                <div style="height:100%; background:linear-gradient(180deg,#101418,#1B2129); padding:64px 14px 0; font-family:-apple-system,'PingFang SC',sans-serif;">
+                  <div style="text-align:center; color:#fff;">
+                    <div style="font-size:15px; opacity:.8;">7月6日 周一</div>
+                    <div style="font-size:56px; font-weight:300; letter-spacing:1px; margin-top:2px;">10:36</div>
+                  </div>
+                  <div style="margin-top:26px; background:rgba(255,255,255,.14); backdrop-filter:blur(20px); border-radius:18px; padding:13px 14px; color:#fff;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <div style="width:22px; height:22px; border-radius:6px; background:var(--accent,#D9560B); display:grid; place-items:center;"><div style="width:10px; height:3px; border-radius:2px; background:#fff; transform:rotate(-45deg);"></div></div>
+                      <span style="font-size:12px; font-weight:600; opacity:.85;">Second · 决策请求</span>
+                      <span style="flex:1;"></span>
+                      <span style="font-size:11px; opacity:.5;">现在</span>
+                    </div>
+                    <div style="font-size:13.5px; font-weight:650; margin-top:9px; line-height:1.45;">{{mob.title}}</div>
+                    <div style="font-size:11.5px; opacity:.65; margin-top:4px;">{{mob.sub}}</div>
+                    <sc-if value="{{mob.pending}}" hint-placeholder-val="{{true}}">
+                      <div style="display:flex; gap:8px; margin-top:12px;">
+                        <div onClick="{{mob.approve}}" style="flex:1; text-align:center; background:var(--accent,#D9560B); border-radius:10px; padding:9px 0; font-size:13px; font-weight:700; cursor:pointer;">批准</div>
+                        <div onClick="{{mob.reject}}" style="flex:1; text-align:center; background:rgba(255,255,255,.16); border-radius:10px; padding:9px 0; font-size:13px; font-weight:700; cursor:pointer;">拒绝</div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{mob.decided}}" hint-placeholder-val="{{false}}">
+                      <div style="margin-top:12px; text-align:center; font-size:12.5px; font-weight:700; color:#7EE2A8; background:rgba(126,226,168,.12); border-radius:10px; padding:9px 0;">{{mob.doneLabel}}</div>
+                    </sc-if>
+                  </div>
+                  <div style="margin-top:10px; background:rgba(255,255,255,.10); border-radius:18px; padding:12px 14px; color:#fff;">
+                    <div style="font-size:12px; font-weight:600; opacity:.85;">Second · 任务进度</div>
+                    <div style="font-size:12.5px; margin-top:6px; opacity:.75; line-height:1.5;">李哲的分身今天完成 4 个任务,拦截 1 次越权操作,0 次需要你中转。</div>
+                  </div>
+                </div>
+              </x-import>
+            </div>
+            <!-- Slack -->
+            <div style="flex:1; min-width:380px; max-width:520px;">
+              <div style="border:1px solid #E2DDD2; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.05);">
+                <div style="padding:11px 16px; border-bottom:1px solid #EFEBE1; display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:13px; font-weight:750;"># payments</span>
+                  <span style="font-size:11px; color:#9B9584;">Slack · 审批按钮消息</span>
+                </div>
+                <div style="padding:16px;">
+                  <div style="display:flex; gap:10px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:#3C3830; color:#E9E4DA; display:grid; place-items:center; font-size:13px; font-weight:700; flex:none;">张</div>
+                    <div>
+                      <div style="font-size:13px;"><b>张薇</b> <span style="font-size:11px; color:#9B9584;">10:02</span></div>
+                      <div style="font-size:13.5px; margin-top:3px; line-height:1.55;">线上订单偶发重复扣款,<span style="color:#1264A3; background:#E8F5FA; border-radius:3px; padding:0 3px;">@李哲</span> 今天能修吗?</div>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:10px; margin-top:16px;">
+                    <div style="width:34px; height:34px; border-radius:8px; background:var(--accent,#D9560B); display:grid; place-items:center; flex:none;"><div style="width:14px; height:4px; border-radius:2px; background:#fff; transform:rotate(-45deg);"></div></div>
+                    <div style="flex:1;">
+                      <div style="font-size:13px;"><b>Second</b> <span style="font-size:10px; font-weight:700; color:#6E6858; background:#EDE9DF; border-radius:3px; padding:1px 4px;">APP</span> <span style="font-size:11px; color:#9B9584;">10:31</span></div>
+                      <div style="font-size:13px; margin-top:3px; line-height:1.6; color:#3A362E;">李哲的分身已接住任务并完成修复(PR #412,3 条新单测通过)。回填 37 条受影响订单需要<b>生产库写权限</b>,超出当前授权。</div>
+                      <div style="border-left:3px solid var(--accent,#D9560B); background:#FAF6EF; border-radius:0 8px 8px 0; padding:10px 12px; margin-top:8px;">
+                        <div style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#6E6858;">D-1042 · 高风险 · prod-db: orders · UPDATE 37 行 · 附回滚脚本</div>
+                      </div>
+                      <sc-if value="{{mob.pending}}" hint-placeholder-val="{{true}}">
+                        <div style="display:flex; gap:8px; margin-top:10px;">
+                          <button onClick="{{mob.approve}}" style="cursor:pointer; border:none; background:#007A5A; color:#fff; font-size:12.5px; font-weight:700; border-radius:6px; padding:8px 16px; font-family:inherit;" style-hover="filter:brightness(.93)">批准</button>
+                          <button onClick="{{mob.reject}}" style="cursor:pointer; border:1px solid #DDD9CE; background:#fff; color:#1D1B17; font-size:12.5px; font-weight:650; border-radius:6px; padding:8px 16px; font-family:inherit;" style-hover="border-color:#B42318; color:#B42318">拒绝</button>
+                          <button onClick="{{mob.goDetail}}" style="cursor:pointer; border:1px solid #DDD9CE; background:#fff; color:#1D1B17; font-size:12.5px; font-weight:650; border-radius:6px; padding:8px 16px; font-family:inherit;" style-hover="border-color:#B0A890">查看证据包</button>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{mob.decided}}" hint-placeholder-val="{{false}}">
+                        <div style="margin-top:10px; font-size:12.5px; font-weight:650; color:#007A5A;">✓ {{mob.slackDone}}</div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="font-size:11.5px; color:#9B9584; margin-top:12px; line-height:1.7;">同一个决策,三处可答:Slack 按钮、手机推送、Web 证据包。任一处决策后,其余入口同步关闭,任务在 runtime 可恢复地继续。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <!-- ============ 设置 ============ -->
+    <sc-if value="{{isSettings}}" hint-placeholder-val="{{false}}">
+      <div style="flex:1; overflow-y:auto; padding:26px 34px 48px;">
+        <div style="max-width:780px;">
+          <h1 style="margin:0; font-size:18px; font-weight:700;">设置</h1>
+          <div style="font-size:12.5px; color:#8A8474; margin-top:5px; line-height:1.7;">本地执行环境 · daemon 自动扫描 PATH 中的 agent 执行引擎,并通过探针验证可用性</div>
+
+          <!-- 执行环境 -->
+          <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; margin-top:20px; overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:12px; padding:15px 18px; border-bottom:1px solid #EFEBE1;">
+              <div style="flex:1;">
+                <div style="font-size:13.5px; font-weight:700;">Agent 执行环境</div>
+                <div style="font-size:11.5px; color:#8A8474; margin-top:3px;">上次检测 {{lastScan}} · 新任务将派发给默认引擎</div>
+              </div>
+              <button onClick="{{detectAll}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#1D1B17; font-size:12px; font-weight:650; border-radius:8px; padding:8px 14px; font-family:inherit; flex:none;" style-hover="border-color:var(--accent,#D9560B); color:var(--accent,#D9560B)">{{detectAllLabel}}</button>
+            </div>
+            <sc-for list="{{engines}}" as="e" hint-placeholder-count="4">
+              <div style="padding:14px 18px; border-top:1px solid #EFEBE1; display:flex; gap:13px; align-items:flex-start;">
+                <div style="width:34px; height:34px; border-radius:9px; background:{{e.mBg}}; color:{{e.mC}}; display:grid; place-items:center; font-size:14px; font-weight:750; flex:none; margin-top:2px;">{{e.mono}}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span style="font-size:13.5px; font-weight:700;">{{e.name}}</span>
+                    <span style="font-size:10.5px; font-weight:700; color:{{e.stC}}; background:{{e.stBg}}; border-radius:4px; padding:2px 7px;">{{e.stLabel}}</span>
+                    <sc-if value="{{e.isDefault}}" hint-placeholder-val="{{false}}">
+                      <span style="font-size:10.5px; font-weight:700; color:var(--accent,#D9560B); background:rgba(217,86,11,.1); border-radius:4px; padding:2px 7px;">默认引擎</span>
+                    </sc-if>
+                  </div>
+                  <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; color:#8A8474; margin-top:4px;">{{e.meta}}</div>
+                  <sc-if value="{{e.hasReason}}" hint-placeholder-val="{{false}}">
+                    <div style="font-size:11.5px; color:{{e.reasonC}}; margin-top:5px; line-height:1.6;">{{e.reason}}</div>
+                  </sc-if>
+                  <sc-if value="{{e.detecting}}" hint-placeholder-val="{{false}}">
+                    <div style="margin-top:9px; background:#23211C; border:1px solid #38352D; border-radius:9px; padding:10px 13px; display:flex; flex-direction:column; gap:6px; animation:fadeUp .2s ease;">
+                      <sc-for list="{{e.steps}}" as="st" hint-placeholder-count="3">
+                        <div style="display:flex; align-items:center; gap:9px; opacity:{{st.op}};">
+                          <sc-if value="{{st.active}}" hint-placeholder-val="{{false}}">
+                            <span style="width:7px; height:7px; border-radius:50%; background:#F0B37E; flex:none; animation:pulse 1s infinite;"></span>
+                          </sc-if>
+                          <sc-if value="{{st.done}}" hint-placeholder-val="{{false}}">
+                            <span style="font-size:10px; color:#7EE2A8; flex:none; width:7px;">✓</span>
+                          </sc-if>
+                          <sc-if value="{{st.todo}}" hint-placeholder-val="{{false}}">
+                            <span style="width:7px; height:7px; border-radius:50%; border:1px solid rgba(233,228,218,.3); flex:none;"></span>
+                          </sc-if>
+                          <span style="font-family:ui-monospace,Menlo,monospace; font-size:11px; color:rgba(233,228,218,.85);">{{st.label}}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="display:flex; gap:8px; flex:none; margin-top:2px;">
+                  <sc-if value="{{e.canDefault}}" hint-placeholder-val="{{false}}">
+                    <button onClick="{{e.setDefault}}" style="cursor:pointer; border:none; background:var(--accent,#D9560B); color:#fff; font-size:11.5px; font-weight:700; border-radius:7px; padding:7px 13px; font-family:inherit;" style-hover="filter:brightness(.94)">设为默认</button>
+                  </sc-if>
+                  <button onClick="{{e.redetect}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#6E6858; font-size:11.5px; font-weight:650; border-radius:7px; padding:7px 13px; font-family:inherit;" style-hover="border-color:#B0A890; color:#1D1B17">重新检测</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- 信息接收渠道 -->
+          <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; margin-top:14px; overflow:hidden;">
+            <div style="padding:15px 18px; border-bottom:1px solid #EFEBE1;">
+              <div style="font-size:13.5px; font-weight:700;">信息接收渠道</div>
+              <div style="font-size:11.5px; color:#8A8474; margin-top:3px;">分身从这些渠道接收任务与 @提及,并把决策请求与结果回传到原线程</div>
+            </div>
+            <sc-for list="{{channels}}" as="ch" hint-placeholder-count="3">
+              <div style="padding:14px 18px; border-top:1px solid #EFEBE1; display:flex; gap:13px; align-items:center;">
+                <div style="width:34px; height:34px; border-radius:9px; background:{{ch.mBg}}; color:{{ch.mC}}; display:grid; place-items:center; font-size:14px; font-weight:750; flex:none;">{{ch.mono}}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:13.5px; font-weight:700;">{{ch.name}}</span>
+                    <span style="font-size:10.5px; font-weight:700; color:{{ch.stC}}; background:{{ch.stBg}}; border-radius:4px; padding:2px 7px;">{{ch.stLabel}}</span>
+                  </div>
+                  <div style="font-size:11.5px; color:#8A8474; margin-top:4px;">{{ch.meta}}</div>
+                </div>
+                <sc-if value="{{ch.connected}}" hint-placeholder-val="{{false}}">
+                  <div style="display:flex; align-items:center; gap:8px; flex:none;">
+                    <span style="font-size:11.5px; color:#6E6858;">接收任务与决策推送</span>
+                    <div onClick="{{ch.toggleNotify}}" style="width:34px; height:20px; border-radius:10px; background:{{ch.nBg}}; cursor:pointer; position:relative; transition:background .2s ease; flex:none;">
+                      <div style="position:absolute; top:2px; left:{{ch.nKnob}}; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:left .2s ease;"></div>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ch.connected}}" hint-placeholder-val="{{false}}">
+                  <button onClick="{{ch.disconnect}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#6E6858; font-size:11.5px; font-weight:650; border-radius:7px; padding:7px 13px; font-family:inherit; flex:none;" style-hover="border-color:#B42318; color:#B42318">断开</button>
+                </sc-if>
+                <sc-if value="{{ch.notConnected}}" hint-placeholder-val="{{false}}">
+                  <button onClick="{{ch.connect}}" style="cursor:pointer; border:none; background:var(--accent,#D9560B); color:#fff; font-size:11.5px; font-weight:700; border-radius:7px; padding:7px 14px; font-family:inherit; flex:none;" style-hover="filter:brightness(.94)">{{ch.connectLabel}}</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- Decision MCP -->
+          <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; margin-top:14px; overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:12px; padding:15px 18px; border-bottom:1px solid #EFEBE1;">
+              <div style="flex:1;">
+                <div style="font-size:13.5px; font-weight:700;">Decision MCP · 决策回传通道</div>
+                <div style="font-size:11.5px; color:#8A8474; margin-top:3px;">以 MCP server 形式注入每个 Agent Runtime · 任何引擎内的 agent 都可调用工具把待决策内容发送到 Second,并挂起等待结果</div>
+              </div>
+              <span style="display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:#067647; flex:none;"><span style="width:7px; height:7px; border-radius:50%; background:#3FBF7F; animation:pulse 2s infinite;"></span>server 运行中</span>
+            </div>
+            <div style="padding:14px 18px; border-top:1px solid #EFEBE1;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">MCP 配置片段</span>
+                <span style="flex:1;"></span>
+                <span onClick="{{mcpCopy}}" style="font-size:11.5px; font-weight:650; color:var(--accent,#D9560B); cursor:pointer;" style-hover="text-decoration:underline">复制配置</span>
+              </div>
+              <div style="margin-top:8px; background:#23211C; border:1px solid #38352D; border-radius:9px; padding:11px 14px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; line-height:1.75; color:rgba(233,228,218,.85); white-space:pre;">{{mcpSnippet}}</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:9px;">
+                <sc-for list="{{mcpTools}}" as="mt" hint-placeholder-count="3">
+                  <span style="font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:#4A4638; border:1px solid #E0DACB; background:#F1EDE3; border-radius:5px; padding:3px 8px;">{{mt.text}}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:12px 18px 6px; border-top:1px solid #EFEBE1; font-size:11px; font-weight:700; letter-spacing:.8px; color:#9B9584;">各 RUNTIME 注入状态</div>
+            <sc-for list="{{mcpRows}}" as="m" hint-placeholder-count="4">
+              <div style="padding:11px 18px; border-top:1px solid #EFEBE1; display:flex; gap:12px; align-items:center;">
+                <div style="width:28px; height:28px; border-radius:7px; background:{{m.mBg}}; color:{{m.mC}}; display:grid; place-items:center; font-size:12px; font-weight:750; flex:none;">{{m.mono}}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:13px; font-weight:650;">{{m.name}}</span>
+                    <span style="font-size:10.5px; font-weight:700; color:{{m.stC}}; background:{{m.stBg}}; border-radius:4px; padding:2px 7px;">{{m.stLabel}}</span>
+                  </div>
+                  <div style="font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:#8A8474; margin-top:3px;">{{m.meta}}</div>
+                </div>
+                <sc-if value="{{m.canInject}}" hint-placeholder-val="{{false}}">
+                  <button onClick="{{m.inject}}" style="cursor:pointer; border:none; background:var(--accent,#D9560B); color:#fff; font-size:11.5px; font-weight:700; border-radius:7px; padding:7px 13px; font-family:inherit; flex:none;" style-hover="filter:brightness(.94)">{{m.injectLabel}}</button>
+                </sc-if>
+                <sc-if value="{{m.canRemove}}" hint-placeholder-val="{{false}}">
+                  <button onClick="{{m.remove}}" style="cursor:pointer; border:1px solid #E0DACB; background:#fff; color:#6E6858; font-size:11.5px; font-weight:650; border-radius:7px; padding:7px 13px; font-family:inherit; flex:none;" style-hover="border-color:#B42318; color:#B42318">移除</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- 检测方式 -->
+          <div style="border:1px solid #E2DDD2; background:#FCFBF8; border-radius:12px; margin-top:14px; padding:16px 18px;">
+            <div style="font-size:13.5px; font-weight:700;">检测方式</div>
+            <div style="font-size:12px; color:#6E6858; margin-top:6px; line-height:1.75;">探针三步验证:① 以 headless 模式启动引擎进程 → ② 发送测试输入 <span style="font-family:ui-monospace,Menlo,monospace; background:#F1EDE3; border-radius:4px; padding:1px 6px; font-size:11px;">ping: second-probe</span> → ③ 在 15s 内校验测试输出。三步全部通过才标记为「可用」。</div>
+            <div style="display:flex; align-items:center; gap:12px; margin-top:14px; padding-top:13px; border-top:1px solid #EFEBE1;">
+              <div style="flex:1;">
+                <div style="font-size:12.5px; font-weight:650;">daemon 启动时自动检测</div>
+                <div style="font-size:11.5px; color:#8A8474; margin-top:2px;">每次本地 daemon 启动、以及每 6 小时,自动重新扫描并探测所有引擎</div>
+              </div>
+              <div onClick="{{toggleAutoDetect}}" style="width:38px; height:22px; border-radius:11px; background:{{autoBg}}; cursor:pointer; position:relative; transition:background .2s ease; flex:none;">
+                <div style="position:absolute; top:2px; left:{{autoKnob}}; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:left .2s ease;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <!-- toast -->
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{false}}">
+    <div style="position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#1D1B17; color:#F3F1EC; font-size:13px; font-weight:600; border-radius:10px; padding:11px 20px; box-shadow:0 8px 24px rgba(0,0,0,.25); animation:fadeUp .25s ease; z-index:99;">{{toastText}}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#D9560B&quot;,&quot;options&quot;:[&quot;#D9560B&quot;,&quot;#2563EB&quot;,&quot;#0E7A5F&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;外观&quot;},&quot;compact&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;外观&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.rootRef = React.createRef();
+    this.state = {
+      view: 'inbox', sel: 'd1042', selTask: 't2087',
+      dstat: { d1042: 'pending', d1041: 'pending', d1039: 'pending', d1038: 'done', d1036: 'done' },
+      dopt: { d1042: 'a', d1041: 'a', d1039: 'a', d1038: 'a', d1036: 'a' },
+      resumed: {}, cand: { c77: 'pending', c74: 'pending' }, promoted: [],
+      paused: {}, stopped: {}, toast: null, playStep: 999, playing: false, execOpen: {}, sessOpen: {},
+      defaultEngine: 'claude-code', autoDetect: true, lastScan: '今天 09:00',
+      mcp: {
+        'claude-code': { st:'ok' },
+        'codex':       { st:'none' },
+        'hermes':      { st:'na' },
+        'openclaw':    { st:'none' }
+      },
+      chan: {
+        slack:   { connected:true,  notify:true },
+        linear:  { connected:true,  notify:true },
+        clickup: { connected:false, notify:true, connecting:false }
+      },
+      engDet: {
+        'claude-code': { phase:'done', result:'ok', ms:'1.2s' },
+        'codex':       { phase:'done', result:'ok', ms:'2.8s' },
+        'hermes':      { phase:'done', result:'missing' },
+        'openclaw':    { phase:'done', result:'fail' }
+      }
+    };
+    this.ENGINES = [
+      { id:'claude-code', name:'Claude Code', mono:'C', mBg:'#FBEADD', mC:'#C4520E', bin:'claude',   ver:'v1.0.44', path:'/usr/local/bin/claude',  installed:true },
+      { id:'codex',       name:'Codex CLI',   mono:'X', mBg:'#E7ECFB', mC:'#3B5BDB', bin:'codex',    ver:'v0.9.2',  path:'~/.cargo/bin/codex',     installed:true },
+      { id:'hermes',      name:'Hermes',      mono:'H', mBg:'#EFEAFB', mC:'#6941C6', bin:'hermes',   installed:false },
+      { id:'openclaw',    name:'OpenClaw',    mono:'O', mBg:'#EAF7EE', mC:'#067647', bin:'openclaw', ver:'v0.3.1',  path:'~/.local/bin/openclaw',  installed:true, fail:true },
+    ];
+    this._dts = [];
+    this.CHANNELS = [
+      { id:'slack',   name:'Slack',   mono:'S', mBg:'#EFEAFB', mC:'#6941C6', connMeta:'工作区 second-inc · 监听 @李哲 与 #eng-* 频道 · 决策按钮消息已启用', discMeta:'OAuth 授权后,分身可接收 @提及并在原线程回传结果' },
+      { id:'linear',  name:'Linear',  mono:'L', mBg:'#E7ECFB', mC:'#3B5BDB', connMeta:'团队 BAT · 监听指派给我的 issue · 状态自动同步', discMeta:'连接后,指派给你的 issue 自动路由到分身' },
+      { id:'clickup', name:'ClickUp', mono:'C', mBg:'#FBEADD', mC:'#C4520E', connMeta:'空间 Growth · 监听指派任务与定时任务', discMeta:'连接后,支持定时任务触发(如每周一的监控周报)' },
+    ];
+    this.DEC = [
+      { id:'d1042', num:'D-1042', type:'授权', risk:'高', title:'请求生产数据库写权限', task:'T-2087 · 修复订单重复扣款', source:'Slack #payments', agent:'李哲的分身', engine:'Claude Code', time:'4 分钟前', traceId:'t2087',
+        background:'任务由张薇在 Slack #payments 中 @李哲 发起,你的分身自动接管。它已定位到 orders 服务重复扣款的根因(幂等键缺失),补丁与 3 条新单测已完成并通过。执行 psql UPDATE 回填 37 条受影响订单时,被 PreToolUse 钩子拦截:生产库写操作命中高风险策略,超出当前授权范围,任务已挂起、可恢复。',
+        impact:['prod-db · orders 表 · UPDATE 37 行(附回滚脚本)','services/orders/refund.py · +42 −7','tests/orders/test_refund.py · 新增 3 用例'],
+        options:[{k:'a',label:'批准本次写入',desc:'仅放行本条 UPDATE,执行前自动存档回滚脚本',rec:true},{k:'b',label:'批准并生成规则候选',desc:'后续同类订单回填进入 RULE_CANDIDATES,等你二次确认'},{k:'c',label:'改为人工执行',desc:'分身输出 SQL 与核对清单,由 DBA 手动执行'}],
+        artifacts:['PR #412 · fix: 幂等键缺失','rollback-2087.sql','trace · run-2087'] },
+      { id:'d1041', num:'D-1041', type:'选择', risk:'中', title:'通知服务 v2 兼容方案需要选型', task:'T-2085 · 通知服务 v2 迁移', source:'Linear BAT-291', agent:'王雨桐的分身', engine:'Claude Code', time:'26 分钟前', traceId:'t2085',
+        background:'通知服务 v2 的 payload 结构变更影响 3 个下游消费者(billing / crm / mobile-push)。分身完成了两套迁移方案的实现与契约测试,均通过,需要你选定方向后继续。',
+        impact:['下游消费者 · billing / crm / mobile-push','api/notify/schema.json · 结构变更'],
+        options:[{k:'a',label:'方案 A · 双写过渡',desc:'保留旧字段 90 天,下游零成本,技术债 90 天后清理',rec:true},{k:'b',label:'方案 B · 直接版本化 /v2',desc:'干净但需 3 个下游同步发版,协调成本高'},{k:'c',label:'补充信息后再定',desc:'让分身先出下游发版排期评估'}],
+        artifacts:['方案对比 · notify-v2-plan.md','契约测试报告 · 全部通过'] },
+      { id:'d1039', num:'D-1039', type:'审批', risk:'中', title:'PR 已就绪,请求合并到 main', task:'T-2082 · CI flaky 用例修复', source:'GitHub second/console', agent:'李哲的分身', engine:'Claude Code', time:'1 小时前', traceId:'t2082',
+        background:'分身修复了 3 个间歇性失败的 CI 用例(竞态导致),连续 20 次全绿。改动仅涉及测试代码,但按你的策略,合并到 main 一律需要审批。',
+        impact:['tests/e2e/checkout.spec.ts · 重写等待逻辑','.github/workflows/ci.yml · 重试策略'],
+        options:[{k:'a',label:'批准合并',desc:'squash 合并,自动带上风险清单',rec:true},{k:'b',label:'先跑一轮夜间全量',desc:'明早出结果后自动重新请求'}],
+        artifacts:['PR #408 · 20/20 全绿','flaky 根因分析.md'] },
+      { id:'d1038', num:'D-1038', type:'补充', risk:'低', title:'周报数据口径需要确认', task:'T-2079 · 竞品价格监控周报', source:'ClickUp', agent:'李哲的分身', engine:'Claude Code', time:'3 小时前', traceId:'t2079',
+        background:'周报里"降价 SKU 数"存在两种口径:按 SKU 去重或按变动次数。分身依据你的偏好(结论先行、按 SKU 去重)拟选了前者,已确认后恢复执行。',
+        impact:['reports/pricing-w27.md'],
+        options:[{k:'a',label:'按 SKU 去重',desc:'与上季度口径一致',rec:true},{k:'b',label:'按变动次数',desc:'反映波动频率'}],
+        artifacts:['pricing-w27.md 草稿'] },
+      { id:'d1036', num:'D-1036', type:'异常', risk:'高', title:'npm 官方源超时,请求改用内网镜像', task:'T-2071 · 依赖升级', source:'Slack #eng-infra', agent:'李哲的分身', engine:'Claude Code', time:'昨天', traceId:'t2082',
+        background:'依赖安装连续 3 次超时。改源属于环境变更,命中异常处理策略。已批准使用内网镜像,任务当日恢复并完成。',
+        impact:['.npmrc · registry 变更(仅本 workspace)'],
+        options:[{k:'a',label:'本 workspace 改用内网镜像',desc:'不影响全局配置',rec:true},{k:'b',label:'等官方源恢复',desc:'任务挂起'}],
+        artifacts:['安装日志 · 3 次超时记录'] },
+    ];
+    this.TASKS = [
+      { id:'t2087', num:'T-2087', title:'修复订单重复扣款', entry:'Slack #payments', agent:'李哲的分身', engine:'Claude Code', worktree:'run-2087', decId:'d1042' },
+      { id:'t2085', num:'T-2085', title:'通知服务 v2 迁移', entry:'Linear BAT-291', agent:'王雨桐的分身', engine:'Claude Code', worktree:'run-2085', decId:'d1041' },
+      { id:'t2082', num:'T-2082', title:'CI flaky 用例修复', entry:'GitHub', agent:'李哲的分身', engine:'Claude Code', worktree:'run-2082', decId:'d1039' },
+      { id:'t2079', num:'T-2079', title:'竞品价格监控周报', entry:'ClickUp', agent:'李哲的分身', engine:'Claude Code', worktree:'run-2079', decId:'d1038' },
+    ];
+    this.RISK = { '高':{c:'#B42318',bg:'#FEE4E2'}, '中':{c:'#B54708',bg:'#FEF0C7'}, '低':{c:'#067647',bg:'#DCFAE6'} };
+    this.ACTOR = {
+      entry:{label:null,c:'#3B5BDB',bg:'#E7ECFB'}, agent:{c:'#C4520E',bg:'#FBEADD'},
+      runtime:{c:'#5E5A4E',bg:'#EDE9DF'}, gate:{c:'#B42318',bg:'#FEE4E2'},
+      decision:{c:'#8B6A14',bg:'#FBF0CE'}, out:{c:'#067647',bg:'#DCFAE6'}, learn:{c:'#6941C6',bg:'#EFEAFB'}
+    };
+  }
+
+  componentDidMount(){ this.applyVars(); }
+  componentDidUpdate(){ this.applyVars(); }
+  applyVars(){
+    const el = this.rootRef.current; if(!el) return;
+    el.style.setProperty('--accent', this.props.accent ?? '#D9560B');
+    el.style.setProperty('--rowpad', (this.props.compact ?? false) ? '9px' : '13px');
+  }
+
+  toast(msg){
+    clearTimeout(this._tt);
+    this.setState({toast:msg});
+    this._tt = setTimeout(()=>this.setState({toast:null}), 2600);
+  }
+
+  setDet(id, patch){
+    this.setState(s=>({engDet:{...s.engDet, [id]:{...s.engDet[id], ...patch}}}));
+  }
+  detect(id){
+    const e = this.ENGINES.find(x=>x.id===id);
+    const cur = this.state.engDet[id];
+    if(cur && cur.phase!=='done') return;
+    const T = (fn,ms)=>this._dts.push(setTimeout(fn,ms));
+    if(!e.installed){
+      this.setDet(id, {phase:'scan', result:null});
+      T(()=>this.setDet(id, {phase:'done', result:'missing'}), 1100);
+      return;
+    }
+    this.setDet(id, {phase:'launch', result:null});
+    T(()=>this.setDet(id, {phase:'input'}), 900);
+    T(()=>this.setDet(id, {phase:'wait'}), 1800);
+    if(e.fail){
+      T(()=>{ this.setDet(id, {phase:'done', result:'fail'}); this.toast(e.name+' 探针失败 · 15s 内未收到测试输出'); }, 4200);
+    } else {
+      T(()=>{ this.setDet(id, {phase:'done', result:'ok', ms: id==='claude-code'?'1.1s':'2.6s'}); this.toast(e.name+' 探针通过 · 标记为可用'); }, 2800);
+    }
+  }
+  detectAll(){
+    this.setState({lastScan:'刚刚'});
+    this.ENGINES.forEach((e,i)=>this._dts.push(setTimeout(()=>this.detect(e.id), i*350)));
+  }
+
+  decide(id, verdict){
+    this.setState(s=>({dstat:{...s.dstat,[id]:verdict}}));
+    if(verdict==='approved'){
+      this.toast('已批准 · 决策经 Decision MCP 回传 runtime');
+      setTimeout(()=>{ this.setState(s=>({resumed:{...s.resumed,[id]:true}})); this.toast('任务已在 runtime 恢复执行'); }, 1700);
+    } else {
+      this.toast('已拒绝 · 分身将按拒绝理由调整方案');
+    }
+  }
+
+  renderVals(){
+    const S = this.state;
+    const go = (patch)=>()=>this.setState(patch);
+    const stMap = {
+      pending:{label:'待你决策', c:'#C4520E'},
+      approved:{label:'已批准 · 任务已恢复', c:'#067647'},
+      rejected:{label:'已拒绝', c:'#98937F'},
+      done:{label:'已处理 · 已恢复', c:'#98937F'}
+    };
+    const pendingCount = this.DEC.filter(d=>S.dstat[d.id]==='pending').length;
+
+    // 导航
+    const NAV = [
+      {key:'inbox', label:'收件箱', icon:'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z', badge: pendingCount},
+      {key:'tasks', label:'任务', icon:'M22 12h-4l-3 9L9 3l-3 9H2'},
+      {key:'runtime', label:'运行时', icon:'M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 9h6v6H9z'},
+      {key:'auth', label:'授权', icon:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'},
+      {key:'mobile', label:'消息端', icon:'M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2'},
+      {key:'settings', label:'设置', icon:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'},
+    ];
+    const navItems = NAV.map(n=>({
+      label:n.label, icon:n.icon,
+      bg: S.view===n.key ? 'rgba(255,255,255,.10)' : 'transparent',
+      color: S.view===n.key ? '#FFFFFF' : 'rgba(233,228,218,.72)',
+      weight: S.view===n.key ? 650 : 500,
+      hasBadge: !!n.badge, badge: n.badge,
+      go: go({view:n.key})
+    }));
+
+    // 收件箱列表
+    const decisionList = this.DEC.map(d=>{
+      const st = S.dstat[d.id]; const sm = stMap[st]; const selq = S.sel===d.id;
+      return { ...d, riskC:this.RISK[d.risk].c, riskBg:this.RISK[d.risk].bg, typeLabel:d.type,
+        stLabel: st==='approved' && !S.resumed[d.id] ? '已批准 · 恢复中…' : sm.label, stC: sm.c,
+        borderCol: selq ? 'var(--accent,#D9560B)' : '#E7E2D6',
+        bg: selq ? '#FFFFFF' : '#FDFCF9',
+        go: go({sel:d.id}) };
+    });
+
+    // 详情
+    const d = this.DEC.find(x=>x.id===S.sel) || this.DEC[0];
+    const st = S.dstat[d.id];
+    const decided = st!=='pending';
+    const resumed = !!S.resumed[d.id];
+    const bannerMap = {
+      approved: resumed
+        ? {t:`✓ 已批准(${d.options.find(o=>o.k===S.dopt[d.id])?.label})· 决策已回传,任务在 ${d.task.split(' ·')[0]} 恢复执行,结果将回传 ${d.source}`, c:'#067647', bg:'#EAF7EE', b:'#CFE8D6'}
+        : {t:'✓ 已批准 · 决策经 Decision MCP 回传,runtime 正在恢复任务…', c:'#067647', bg:'#EAF7EE', b:'#CFE8D6'},
+      rejected: {t:'已拒绝 · 分身收到拒绝理由,将调整方案后重新请求或转人工', c:'#6E6858', bg:'#F1EDE3', b:'#E0DACB'},
+      done: {t:'已处理 · 该决策已完成,任务已恢复并结束', c:'#6E6858', bg:'#F1EDE3', b:'#E0DACB'}
+    };
+    const bn = bannerMap[st] || bannerMap.done;
+    const det = {
+      ...d, typeLabel:d.type, riskC:this.RISK[d.risk].c, riskBg:this.RISK[d.risk].bg,
+      pending: !decided, decided,
+      bannerText:bn.t, bannerC:bn.c, bannerBg:bn.bg, bannerBorder:bn.b,
+      impact: d.impact.map(t=>({text:t})),
+      artifacts: d.artifacts.map(t=>({text:t})),
+      options: d.options.map(o=>{
+        const on = S.dopt[d.id]===o.k;
+        return {...o, borderCol: on?'var(--accent,#D9560B)':'#E7E2D6', bg: on?'#FFF9F4':'#FFFFFF',
+          dotBorder: on?'var(--accent,#D9560B)':'#C9C2B2', dotFill: on?'var(--accent,#D9560B)':'transparent',
+          pick: decided ? ()=>{} : ()=>this.setState(s=>({dopt:{...s.dopt,[d.id]:o.k}})) };
+      }),
+      approve: ()=>this.decide(d.id,'approved'),
+      reject: ()=>this.decide(d.id,'rejected'),
+      askMore: ()=>this.toast('已请求补充信息 · 分身将追加证据后重新提交'),
+      goTrace: go({view:'tasks', selTask:d.traceId, playStep:999, playing:false})
+    };
+
+    // 任务列表 + trace
+    const taskStat = (t)=>{
+      const ds = S.dstat[t.decId];
+      if(t.id==='t2082') return ds==='approved'||ds==='done' ? {label:'已完成',c:'#067647',bg:'#DCFAE6'} : {label:'等待决策',c:'#B54708',bg:'#FEF0C7'};
+      if(t.id==='t2079') return {label:'执行中',c:'#3B5BDB',bg:'#E7ECFB'};
+      if(ds==='pending') return {label:'等待决策',c:'#B54708',bg:'#FEF0C7'};
+      if(ds==='rejected') return {label:'已挂起',c:'#98937F',bg:'#EDE9DF'};
+      return S.resumed[t.decId]||ds==='done' ? {label:'执行中 · 已恢复',c:'#3B5BDB',bg:'#E7ECFB'} : {label:'恢复中…',c:'#3B5BDB',bg:'#E7ECFB'};
+    };
+    const taskList = this.TASKS.map(t=>{
+      const ts = taskStat(t); const selq = S.selTask===t.id;
+      return {...t, stLabel:ts.label, stC:ts.c, stBg:ts.bg,
+        borderCol: selq?'var(--accent,#D9560B)':'#E7E2D6', bg: selq?'#FFFFFF':'#FDFCF9',
+        go: go({selTask:t.id, playStep:999, playing:false})};
+    });
+
+    const tk = this.TASKS.find(x=>x.id===S.selTask) || this.TASKS[0];
+    const tst = taskStat(tk);
+    const tdet = {...tk, stLabel:tst.label, stC:tst.c, stBg:tst.bg};
+    const TOOLC = { PLAN:'#C9B8E8', READ:'#8AB4F8', GREP:'#8AB4F8', EDIT:'#F0B37E', WRITE:'#F0B37E', BASH:'#A8D08D', TEST:'#A8D08D', GATE:'#F49B8F', RESUME:'#7FD0C0' };
+    const traceEvents = this.buildTrace(tk).map((ev,i,arr)=>{
+      const a = this.ACTOR[ev.kind];
+      const open = !!S.execOpen[ev.execId];
+      return { ...ev, actorC:a.c, actorBg:a.bg,
+        dot: i<=S.playStep ? (a.c) : '#D6D0C2', dotRing:'#F3F1EC',
+        op: i<=S.playStep ? 1 : .22,
+        notLast: i<arr.length-1,
+        hasMeta: !!ev.meta, hasLink: !!ev.linkLabel,
+        hasExec: !!ev.exec, execOpen: open, chev: open?90:0,
+        execLabel: open ? '收起执行过程' : ('展开执行过程 · '+(ev.exec?ev.exec.length:0)+' 步'),
+        execHead: ev.execHead || (tk.engine+'(headless)· workspace '+tk.worktree),
+        execSteps: (ev.exec||[]).map(st=>({...st, tc: TOOLC[st.tool]||'#B9B29F'})),
+        toggleExec: ()=>this.setState(s=>({execOpen:{...s.execOpen,[ev.execId]:!s.execOpen[ev.execId]}})),
+        onLink: ev.linkTo ? go(ev.linkTo) : ()=>{} };
+    });
+
+    // runtime
+    const runRows = [
+      { id:'t2087', title:'T-2087 · 修复订单重复扣款', meta:'Claude Code · run-2087 · lease 持有 · 27 tool calls', files:'3 文件 · +47 −7', st: taskStat(this.TASKS[0]) },
+      { id:'t2079', title:'T-2079 · 竞品价格监控周报', meta:'Claude Code · run-2079 · lease 持有 · 9 tool calls', files:'1 文件 · +182 −0', st: {label:'执行中',c:'#3B5BDB',bg:'#E7ECFB'} },
+      { id:'t2085', title:'T-2085 · 通知服务 v2 迁移', meta:'Claude Code · run-2085 · 挂起可恢复 · 等待 D-1041', files:'2 文件 · +96 −31', st: taskStat(this.TASKS[1]) },
+    ].map(r=>{
+      const paused = !!S.paused[r.id]; const stopped = !!S.stopped[r.id];
+      const st = stopped ? {label:'已停止',c:'#B42318',bg:'#FEE4E2'} : paused ? {label:'已暂停',c:'#98937F',bg:'#EDE9DF'} : r.st;
+      const sess = this.buildSession(r.id);
+      const open = !!S.sessOpen[r.id];
+      const SEVC = { '会话':{c:'#6941C6',bg:'#EFEAFB'}, '工具':{c:'#5E5A4E',bg:'#EDE9DF'}, '拦截':{c:'#B42318',bg:'#FEE4E2'}, '决策':{c:'#8B6A14',bg:'#FBF0CE'}, '恢复':{c:'#067647',bg:'#DCFAE6'}, '推送':{c:'#3B5BDB',bg:'#E7ECFB'} };
+      return {...r, stLabel:st.label, stC:st.c, stBg:st.bg,
+        open, chev: open?90:0, rowBg: open?'#F6F3EC':'transparent',
+        sessId: sess.sid,
+        sessDotC: stopped?'#B42318':paused?'#98937F':'#3FBF7F',
+        sessMeta: sess.meta,
+        evCount: sess.events.length,
+        sessEvents: sess.events.map(e=>({...e, kc:(SEVC[e.k]||{}).c||'#5E5A4E', kbg:(SEVC[e.k]||{}).bg||'#EDE9DF'})),
+        openSess: ()=>this.setState(s=>({sessOpen:{...s.sessOpen,[r.id]:!s.sessOpen[r.id]}})),
+        btnLabel: paused?'继续':'暂停',
+        toggle: (e)=>{ if(e&&e.stopPropagation) e.stopPropagation(); this.setState(s=>({paused:{...s.paused,[r.id]:!paused}})); this.toast(paused?'任务已继续':'任务已暂停 · lease 保留,状态可恢复'); },
+        stop: (e)=>{ if(e&&e.stopPropagation) e.stopPropagation(); this.setState(s=>({stopped:{...s.stopped,[r.id]:true}})); this.toast('任务已停止 · workspace 快照与 trace 已保留'); }};
+    });
+    const fileActs = [
+      {op:'写入', path:'services/orders/refund.py', run:'run-2087', k:'w'},
+      {op:'写入', path:'tests/orders/test_refund.py', run:'run-2087', k:'w'},
+      {op:'写入', path:'reports/pricing-w27.md', run:'run-2079', k:'w'},
+      {op:'读取', path:'api/notify/schema.json', run:'run-2085', k:'r'},
+      {op:'拦截', path:'.env(读取被策略 P-09 拒绝)', run:'run-2079', k:'x'},
+    ].map(f=>({...f,
+      opC: f.k==='w'?'#B54708':f.k==='r'?'#5E5A4E':'#B42318',
+      opBg: f.k==='w'?'#FEF0C7':f.k==='r'?'#EDE9DF':'#FEE4E2'}));
+    const logLines = [
+      {text:'10:36:02 decision.resolved D-1042 → approve(option A) via mobile-push', c:'#7EE2A8'},
+      {text:'10:36:03 task.resume run-2087 · restore context · lease renewed', c:'#E9E4DA'},
+      {text:'10:36:11 tool.exec psql UPDATE orders … (37 rows) · rollback saved', c:'#E9E4DA'},
+      {text:'10:31:40 gate.block psql UPDATE(prod write)→ decision D-1042 created', c:'#F5B097'},
+      {text:'10:31:40 notify slack#payments + push(li-zhe-iphone)', c:'#9B9584'},
+      {text:'10:04:12 run.start run-2087 · worktree created · engine claude-code', c:'#9B9584'},
+      {text:'10:02:31 route @李哲 → personal-agent(li-zhe)· auth check pass', c:'#9B9584'},
+    ];
+
+    // 授权三层
+    const prefs = [
+      {text:'PR 描述使用中文,附风险清单与回滚方式', src:'来自 14 次 PR 任务 · 最近引用 今天'},
+      {text:'报表结论先行,数据放附录;SKU 统计按去重口径', src:'来自决策 D-1038 · 已被引用 3 次'},
+      {text:'优先复用 utils/ 现有工具函数,避免新增依赖', src:'来自 code review 反馈 · 上周学习'},
+    ];
+    const candDef = [
+      {id:'c77', num:'RC-77', conf:'92%', text:'staging 环境的数据回填 SQL 可自动放行(生产仍强制 Gate)', src:'从 6 次同类任务 + 决策 D-1042/D-1029/D-1017 提取'},
+      {id:'c74', num:'RC-74', conf:'85%', text:'仅改动文档(*.md)的 PR 可自动合并', src:'从 9 次全批准的文档 PR 提取'},
+    ];
+    const cands = candDef.map(c=>{
+      const cs = S.cand[c.id];
+      return {...c,
+        actionable: cs==='pending', done: cs!=='pending',
+        op: cs==='ignored' ? .45 : 1,
+        doneLabel: cs==='approved'?'✓ 已确认 · 已生效为授权规则':'已忽略 · 30 天后可重新提取',
+        doneC: cs==='approved'?'#067647':'#98937F',
+        promote: ()=>{ this.setState(s=>({cand:{...s.cand,[c.id]:'approved'}, promoted:[c.id,...s.promoted]})); this.toast('已确认 · 新授权规则生效,已记录 lineage'); },
+        ignore: ()=>{ this.setState(s=>({cand:{...s.cand,[c.id]:'ignored'}})); this.toast('已忽略该规则候选'); }};
+    });
+    const promotedRules = S.promoted.map(id=>{
+      const c = candDef.find(x=>x.id===id);
+      return {text:c.text, src:`由你于刚刚确认 · lineage: ${c.num} ← ${c.src.replace('从','')}`, tag:'允许', tagC:'#067647', tagBg:'#DCFAE6', isNew:true, borderCol:'var(--accent,#D9560B)'};
+    });
+    const rules = [...promotedRules,
+      {text:'允许读取 repo second/* 的代码与 issue', src:'由李哲于 6/28 经决策中心确认 · 长期', tag:'允许', tagC:'#067647', tagBg:'#DCFAE6', isNew:false, borderCol:'#DEEBE1'},
+      {text:'允许发送 Slack 消息至 #eng-* 频道', src:'由李哲于 6/28 确认 · 长期', tag:'允许', tagC:'#067647', tagBg:'#DCFAE6', isNew:false, borderCol:'#DEEBE1'},
+      {text:'生产环境写操作 · 一律进 Human Gate', src:'组织策略 P-03 · 不可被个人规则覆盖', tag:'强制 Gate', tagC:'#B42318', tagBg:'#FEE4E2', isNew:false, borderCol:'#DEEBE1'},
+      {text:'读取 .env 与 secret 文件 · 拒绝', src:'组织策略 P-09 · 不可覆盖', tag:'拒绝', tagC:'#B42318', tagBg:'#FEE4E2', isNew:false, borderCol:'#DEEBE1'},
+    ];
+
+    // 轻决策
+    const mobD = this.DEC.find(x=>S.dstat[x.id]==='pending');
+    const mob = mobD ? {
+      title:`${mobD.title} · ${mobD.risk}风险`,
+      sub:`${mobD.task} · ${mobD.agent}`,
+      pending:true, decided:false, doneLabel:'', slackDone:'',
+      approve: ()=>this.decide(mobD.id,'approved'),
+      reject: ()=>this.decide(mobD.id,'rejected'),
+      goDetail: go({view:'inbox', sel:mobD.id})
+    } : {
+      title:'暂无待决策', sub:'所有决策已处理,任务在后台继续', pending:false, decided:true,
+      doneLabel:'✓ 全部处理完毕', slackDone:'已批准 · 任务已恢复,结果稍后回传本线程',
+      approve:()=>{}, reject:()=>{}, goDetail: go({view:'inbox'})
+    };
+    // Slack 卡片跟随 d1042
+    const d42 = S.dstat['d1042'];
+    if(d42!=='pending'){
+      mob.pending = false; mob.decided = true;
+      mob.doneLabel = d42==='approved' ? '✓ 已批准 · 任务恢复中' : '已拒绝';
+      mob.slackDone = d42==='approved' ? '李哲已批准(via 手机推送)· 任务已恢复,回填完成后结果回传本线程' : '李哲已拒绝 · 分身将改为输出 SQL 转人工执行';
+    } else { mob.pending = true; mob.decided = false; }
+
+    // 设置 · 执行环境
+    const PHASE_IDX = {launch:0, input:1, wait:2};
+    const anyDetecting = this.ENGINES.some(e=>{ const d=S.engDet[e.id]; return d && d.phase!=='done'; });
+    const engines = this.ENGINES.map(e=>{
+      const d = S.engDet[e.id] || {phase:'done', result:'missing'};
+      const detecting = d.phase!=='done';
+      const isDefault = S.defaultEngine===e.id;
+      let stLabel, stC, stBg;
+      if(detecting){ stLabel='检测中…'; stC='#3B5BDB'; stBg='#E7ECFB'; }
+      else if(d.result==='ok'){ stLabel='可用'; stC='#067647'; stBg='#DCFAE6'; }
+      else if(d.result==='fail'){ stLabel='不可用'; stC='#B42318'; stBg='#FEE4E2'; }
+      else { stLabel='未安装'; stC='#6E6858'; stBg='#EDE9DF'; }
+      const meta = e.installed
+        ? e.path + ' · ' + e.ver + (d.result==='ok' && d.ms ? ' · 探针往返 ' + d.ms : '')
+        : 'PATH 中未找到 ' + e.bin + ' 可执行文件';
+      const stepDefs = d.phase==='scan'
+        ? [{label:'扫描 PATH · which ' + e.bin}]
+        : [
+            {label:'启动进程 · ' + e.bin + ' --headless'},
+            {label:'发送测试输入 · "ping: second-probe"'},
+            {label:'校验测试输出 · 15s 超时'},
+          ];
+      const curIdx = d.phase==='scan' ? 0 : (PHASE_IDX[d.phase] ?? -1);
+      const steps = stepDefs.map((st,i)=>({...st,
+        done: i<curIdx, active: i===curIdx, todo: i>curIdx,
+        op: i<=curIdx ? 1 : .45 }));
+      let reason=null, reasonC='#8A8474';
+      if(!detecting && d.result==='fail'){ reason='探针在 15s 内未收到测试输出,进程已终止 · 建议检查引擎登录状态或升级版本'; reasonC='#B42318'; }
+      if(!detecting && d.result==='missing'){ reason='安装后点击「重新检测」,daemon 会自动生成对应 adapter'; }
+      return { ...e, isDefault, detecting, steps,
+        stLabel, stC, stBg, meta,
+        hasReason: !!reason, reason, reasonC,
+        canDefault: !detecting && d.result==='ok' && !isDefault,
+        setDefault: ()=>{ this.setState({defaultEngine:e.id}); this.toast('默认执行引擎已切换为 ' + e.name + ' · 新派发的任务将使用该引擎'); },
+        redetect: ()=>this.detect(e.id) };
+    });
+    const defEng = this.ENGINES.find(e=>e.id===S.defaultEngine);
+
+    // 设置 · Decision MCP
+    const mcpSnippet = '"mcpServers": {\n  "second-decision": {\n    "command": "second",\n    "args": ["mcp", "serve"],\n    "env": { "SECOND_DAEMON": "localhost:7317" }\n  }\n}';
+    const mcpTools = [
+      {text:'request_decision(title, options, evidence)'},
+      {text:'report_progress(run_id, summary)'},
+      {text:'query_authorization(action)'},
+    ];
+    const MCP_META = {
+      'claude-code': '~/.claude/settings.json · mcpServers.second-decision',
+      'codex':       '~/.codex/config.toml · [mcp_servers.second-decision]',
+      'hermes':      '引擎未安装 · 安装后可注入',
+      'openclaw':    '~/.openclaw/mcp.json · servers.second-decision',
+    };
+    const mcpRows = this.ENGINES.map(e=>{
+      const m = S.mcp[e.id] || {st:'none'};
+      let stLabel, stC, stBg;
+      if(m.st==='injecting'){ stLabel='写入中…'; stC='#3B5BDB'; stBg='#E7ECFB'; }
+      else if(m.st==='ok'){ stLabel='已注入'; stC='#067647'; stBg='#DCFAE6'; }
+      else if(m.st==='na'){ stLabel='引擎未安装'; stC='#6E6858'; stBg='#EDE9DF'; }
+      else { stLabel='未配置'; stC='#B54708'; stBg='#FEF0C7'; }
+      const setM=(patch)=>this.setState(s=>({mcp:{...s.mcp,[e.id]:{...s.mcp[e.id],...patch}}}));
+      return { id:e.id, name:e.name, mono:e.mono, mBg:e.mBg, mC:e.mC,
+        stLabel, stC, stBg,
+        meta: m.st==='ok' ? MCP_META[e.id] + ' · 3 个工具可见' : MCP_META[e.id],
+        canInject: m.st==='none' || m.st==='injecting',
+        canRemove: m.st==='ok',
+        injectLabel: m.st==='injecting' ? '写入中…' : '一键注入',
+        inject: ()=>{ if(m.st==='injecting') return; setM({st:'injecting'}); this._dts.push(setTimeout(()=>{ setM({st:'ok'}); this.toast('已写入 '+e.name+' 的 MCP 配置 · agent 下次启动即可调用 request_decision'); }, 1300)); },
+        remove: ()=>{ setM({st:'none'}); this.toast('已从 '+e.name+' 移除 Decision MCP · 该 runtime 的决策请求将失效'); } };
+    });
+
+    // 设置 · 信息接收渠道
+    const setChan = (id, patch)=>this.setState(s=>({chan:{...s.chan, [id]:{...s.chan[id], ...patch}}}));
+    const channels = this.CHANNELS.map(c=>{
+      const st = S.chan[c.id] || {connected:false, notify:true};
+      const connected = st.connected;
+      let stLabel, stC, stBg;
+      if(st.connecting){ stLabel='连接中…'; stC='#3B5BDB'; stBg='#E7ECFB'; }
+      else if(connected){ stLabel = st.notify ? '已连接' : '已连接 · 推送暂停'; stC='#067647'; stBg='#DCFAE6'; }
+      else { stLabel='未连接'; stC='#6E6858'; stBg='#EDE9DF'; }
+      return { ...c, connected, notConnected: !connected,
+        stLabel, stC, stBg,
+        meta: connected ? c.connMeta : c.discMeta,
+        nBg: st.notify ? 'var(--accent,#D9560B)' : '#D6D0C2',
+        nKnob: st.notify ? '16px' : '2px',
+        connectLabel: st.connecting ? '连接中…' : '连接',
+        toggleNotify: ()=>{ const nv=!st.notify; setChan(c.id,{notify:nv}); this.toast(nv?(c.name+' 推送已恢复'):(c.name+' 推送已暂停 · 任务仍会接收,决策改由其他渠道兜底')); },
+        connect: ()=>{ if(st.connecting) return; setChan(c.id,{connecting:true}); this._dts.push(setTimeout(()=>{ setChan(c.id,{connected:true, connecting:false, notify:true}); this.toast(c.name+' 已连接 · 分身开始监听该渠道'); }, 1400)); },
+        disconnect: ()=>{ setChan(c.id,{connected:false, connecting:false}); this.toast('已断开 '+c.name+' · 该渠道的任务入口与推送均已停用'); } };
+    });
+
+    return {
+      rootRef: this.rootRef,
+      navItems, pendingCount,
+      daemonAdapter: defEng ? defEng.name : 'Claude Code',
+      isInbox: S.view==='inbox', isTasks: S.view==='tasks', isRuntime: S.view==='runtime',
+      isAuth: S.view==='auth', isMobile: S.view==='mobile', isSettings: S.view==='settings',
+      engines, channels, lastScan: S.lastScan,
+      mcpSnippet, mcpTools, mcpRows,
+      mcpCopy: ()=>{ try{ navigator.clipboard.writeText(mcpSnippet); }catch(e){} this.toast('配置片段已复制 · 粘贴到任意 runtime 的 MCP 配置即可'); },
+      detectAll: ()=>this.detectAll(),
+      detectAllLabel: anyDetecting ? '检测中…' : '全部重新检测',
+      toggleAutoDetect: ()=>{ const nv=!S.autoDetect; this.setState({autoDetect:nv}); this.toast(nv?'已开启自动检测':'已关闭自动检测'); },
+      autoBg: S.autoDetect ? 'var(--accent,#D9560B)' : '#D6D0C2',
+      autoKnob: S.autoDetect ? '18px' : '2px',
+      decisionList, det,
+      taskList, tdet, traceEvents,
+      playLabel: S.playing ? '回放中…' : '▶ 回放 Trace',
+      playTrace: ()=>this.startPlay(),
+      runRows, fileActs, logLines,
+      emergencyStop: ()=>{ this.setState({stopped:{t2087:true,t2079:true,t2085:true}}); this.toast('紧急全停 · 所有 run 已停止,快照与 trace 已保留'); },
+      prefs, cands, rules,
+      mob,
+      hasToast: !!S.toast, toastText: S.toast || ''
+    };
+  }
+
+  startPlay(){
+    if(this.state.playing) return;
+    const total = this.buildTrace(this.TASKS.find(x=>x.id===this.state.selTask)||this.TASKS[0]).length;
+    this.setState({playStep:-1, playing:true});
+    let i = -1;
+    clearInterval(this._pt);
+    this._pt = setInterval(()=>{
+      i++;
+      if(i>=total){ clearInterval(this._pt); this.setState({playing:false, playStep:999}); return; }
+      this.setState({playStep:i});
+    }, 700);
+  }
+  componentWillUnmount(){ clearInterval(this._pt); clearTimeout(this._tt); (this._dts||[]).forEach(clearTimeout); }
+
+  buildSession(id){
+    const S = this.state;
+    if(id==='t2087'){
+      const ds = S.dstat['d1042']; const resumed = !!S.resumed['d1042'];
+      const meta = [
+        {k:'SESSION ID', v:'sess-9f2c41ae'},
+        {k:'引擎', v:'claude-code v1.0.44 · headless'},
+        {k:'WORKSPACE', v:'run-2087 · 独立 worktree'},
+        {k:'启动时间', v:'今天 10:04:12'},
+        {k:'LEASE', v: ds==='pending' ? '持有 · 挂起保留' : '持有 · 续约 8s 前'},
+        {k:'工具调用', v: (resumed||ds==='done') ? '31 次 · 0 失败' : '27 次 · 0 失败'},
+        {k:'TOKEN 用量', v:'182k in · 41k out'},
+        {k:'MCP', v:'second-decision · 已注入'},
+      ];
+      const events = [
+        {t:'10:04:12', k:'会话', text:'session 创建 · claude-code headless 启动 · 注入 second-decision MCP'},
+        {t:'10:04:15', k:'工具', text:'PLAN 拆解:复现 → 定位根因 → 修复 → 单测验证'},
+        {t:'10:05:02', k:'工具', text:'GREP rg "charge" services/orders → 14 处引用'},
+        {t:'10:11:30', k:'工具', text:'TEST pytest -k refund → 2 failed(复现成功)'},
+        {t:'10:18:44', k:'工具', text:'EDIT refund.py · 幂等键校验 · +42 −7'},
+        {t:'10:28:09', k:'工具', text:'TEST pytest tests/orders → 21 passed'},
+        {t:'10:31:40', k:'拦截', text:'PreToolUse:psql UPDATE(生产写)⛔ → 生成 D-1042,session 挂起'},
+        {t:'10:31:41', k:'推送', text:'证据包推送 Slack #payments 按钮消息 + 手机推送'},
+      ];
+      if(ds==='approved'||ds==='done'){
+        events.push({t:'10:36:02', k:'决策', text:'D-1042 批准(option A)· 经 Decision MCP 回传'});
+        if(resumed||ds==='done'){
+          events.push({t:'10:36:03', k:'恢复', text:'恢复 session 上下文(27 条历史工具调用)· lease 续约'});
+          events.push({t:'10:36:11', k:'工具', text:'BASH psql UPDATE orders …(37 行)✓ · 回滚脚本已存档'});
+          events.push({t:'10:38:20', k:'工具', text:'TEST 校验查询 → 0 条重复扣款残留'});
+        }
+      } else if(ds==='rejected'){
+        events.push({t:'刚刚', k:'决策', text:'D-1042 拒绝 · 分身将输出 SQL 转人工执行'});
+      } else {
+        events.push({t:'现在', k:'决策', text:'等待李哲决策 · session 挂起,状态可恢复'});
+      }
+      return { sid:'sess-9f2c41ae', meta, events };
+    }
+    if(id==='t2085'){
+      const ds = S.dstat['d1041'];
+      const meta = [
+        {k:'SESSION ID', v:'sess-b82fe650'},
+        {k:'引擎', v:'claude-code v1.0.44 · headless'},
+        {k:'WORKSPACE', v:'run-2085 · 独立 worktree'},
+        {k:'启动时间', v:'今天 09:12:03'},
+        {k:'LEASE', v:'挂起可恢复 · 快照已存档'},
+        {k:'工具调用', v:'18 次 · 0 失败'},
+        {k:'TOKEN 用量', v:'128k in · 33k out'},
+        {k:'MCP', v:'second-decision · 已注入'},
+      ];
+      const events = [
+        {t:'09:12:03', k:'会话', text:'session 创建 · claude-code headless 启动 · 注入 second-decision MCP'},
+        {t:'09:12:20', k:'工具', text:'PLAN 并行分支:方案 A 双写过渡 / 方案 B 版本化 /v2'},
+        {t:'09:15:11', k:'工具', text:'EDIT api/notify/schema.json · 两分支各自变更'},
+        {t:'09:34:47', k:'工具', text:'TEST 契约测试 billing / crm / mobile-push → 两方案均通过'},
+        {t:'09:52:36', k:'工具', text:'WRITE notify-v2-plan.md · 方案对比(成本 / 技术债 / 回滚)'},
+        {t:'09:58:02', k:'拦截', text:'方向选择需人决策 → 生成 D-1041,session 挂起'},
+        {t:'09:58:03', k:'推送', text:'证据包推送 Linear BAT-291 评论 + 手机推送'},
+      ];
+      if(ds==='pending'){
+        events.push({t:'现在', k:'决策', text:'等待王雨桐决策 · session 挂起,状态可恢复'});
+      } else if(ds==='rejected'){
+        events.push({t:'刚刚', k:'决策', text:'D-1041 拒绝 · 分身将补充下游排期评估后重新提交'});
+      } else {
+        events.push({t:'刚刚', k:'决策', text:'D-1041 已决策 · 经 Decision MCP 回传'});
+        events.push({t:'刚刚', k:'恢复', text:'恢复 session 上下文 · 按所选方案继续迁移'});
+      }
+      return { sid:'sess-b82fe650', meta, events };
+    }
+    // t2079
+    return { sid:'sess-4d17c803',
+      meta: [
+        {k:'SESSION ID', v:'sess-4d17c803'},
+        {k:'引擎', v:'claude-code v1.0.44 · headless'},
+        {k:'WORKSPACE', v:'run-2079 · 独立 worktree'},
+        {k:'启动时间', v:'今天 07:01:12'},
+        {k:'LEASE', v:'持有 · 续约 5s 前'},
+        {k:'工具调用', v:'9 次 · 0 失败'},
+        {k:'TOKEN 用量', v:'46k in · 12k out'},
+        {k:'MCP', v:'second-decision · 已注入'},
+      ],
+      events: [
+        {t:'07:01:12', k:'会话', text:'session 创建(定时任务触发)· claude-code headless 启动'},
+        {t:'07:01:30', k:'工具', text:'READ 加载偏好 PREFERENCES.md:结论先行 · SKU 去重口径'},
+        {t:'07:03:08', k:'工具', text:'BASH 拉取本周价格快照 · 3 竞品 · 1,204 SKU'},
+        {t:'07:24:19', k:'拦截', text:'「降价 SKU 数」两种口径 → 生成 D-1038,session 挂起'},
+        {t:'07:24:20', k:'推送', text:'口径确认推送 Slack 按钮消息'},
+        {t:'08:02:04', k:'决策', text:'李哲确认口径(Slack 按钮)· 按 SKU 去重'},
+        {t:'08:02:05', k:'恢复', text:'恢复 session 上下文 · 写入已确认口径'},
+        {t:'08:05:40', k:'工具', text:'WRITE reports/pricing-w27.md · 结论先行结构,撰写中…'},
+      ] };
+  }
+
+  buildTrace(tk){
+    const S = this.state;
+    if(tk.id==='t2087'){
+      const ds = S.dstat['d1042']; const resumed = !!S.resumed['d1042'];
+      const ev = [
+        {kind:'entry', actor:'Slack', time:'10:02', title:'任务发起', desc:'张薇在 #payments @李哲:"线上订单偶发重复扣款,今天能修吗?"'},
+        {kind:'agent', actor:'李哲的分身', time:'10:02', title:'@人路由 · 分身接住任务', desc:'@李哲 默认路由到个人智能体。授权检查通过(代码读取 · 测试执行),未打扰本人。', meta:'auth check: repo:read ✓ · test:run ✓ · prod:write ✗(需 Gate)', execId:'a2087', execHead:'分身 orchestrator · 接管决策过程', exec:[
+          {t:'10:02', tool:'READ', text:'解析 Slack 消息 → 意图:线上缺陷修复 · 紧急度:今日'},
+          {t:'10:02', tool:'PLAN', text:'匹配任务类型 bugfix → 引擎 Claude Code(headless)'},
+          {t:'10:02', tool:'READ', text:'加载记忆:LEARNED_PATTERNS · orders 服务历史决策 2 条'},
+          {t:'10:02', tool:'BASH', text:'授权预检:repo:read ✓ test:run ✓ prod:write ✗(越界将进 Gate)'},
+          {t:'10:02', tool:'BASH', text:'回帖 Slack:"已接手,预计 30 分钟出补丁" · 派发至 runtime'},
+        ]},
+        {kind:'runtime', actor:'Runtime', time:'10:03', title:'创建隔离 workspace', desc:'独立 worktree run-2087,lease 已获取,heartbeat 正常。', meta:'worktree: run-2087 · engine: claude-code(headless)'},
+        {kind:'runtime', actor:'Claude Code', time:'10:04–10:31', title:'执行 · 27 次工具调用', desc:'定位根因(幂等键缺失)→ 补丁 refund.py → 新增 3 条单测,全部通过。', execId:'x2087a', exec:[
+          {t:'10:04', tool:'PLAN', text:'拆解:复现 → 定位根因 → 修复 → 单测验证'},
+          {t:'10:05', tool:'GREP', text:'rg "charge" services/orders → 14 处引用'},
+          {t:'10:07', tool:'READ', text:'services/orders/refund.py · 320 行'},
+          {t:'10:11', tool:'TEST', text:'pytest tests/orders -k refund → 2 failed(复现成功)'},
+          {t:'10:18', tool:'EDIT', text:'refund.py · 引入幂等键校验 · +42 −7'},
+          {t:'10:24', tool:'WRITE', text:'tests/orders/test_refund.py · 新增 3 用例'},
+          {t:'10:28', tool:'TEST', text:'pytest tests/orders → 21 passed'},
+          {t:'10:31', tool:'GATE', text:'psql UPDATE orders …(生产写)→ ⛔ PreToolUse 拦截,挂起等待 D-1042'},
+        ]},
+        {kind:'gate', actor:'Human Gate', time:'10:31', title:'PreToolUse 拦截 · 生成决策 D-1042', desc:'psql UPDATE(生产库写)命中高风险策略,任务挂起、状态可恢复。证据包已推送 Slack 按钮 + 手机。', linkLabel:'打开决策 D-1042', linkTo:{view:'inbox', sel:'d1042'}},
+      ];
+      if(ds==='pending'){
+        ev.push({kind:'decision', actor:'等待决策', time:'现在', title:'等待李哲决策', desc:'决策延迟计时中 · 手机推送与 Slack 按钮均可作答,任一处决策后其余入口同步关闭。'});
+      } else if(ds==='rejected'){
+        ev.push({kind:'decision', actor:'决策中心', time:'刚刚', title:'李哲拒绝', desc:'分身将输出 SQL 与核对清单,转 DBA 人工执行。'});
+      } else {
+        ev.push({kind:'decision', actor:'决策中心', time:'10:36', title:'李哲批准(手机推送)', desc:'选择「批准本次写入」· 决策延迟 4m12s · 经 Decision MCP 回传 runtime。'});
+        if(resumed||ds==='done'){
+          ev.push({kind:'runtime', actor:'Claude Code', time:'10:36–10:38', title:'审批通过 · 可恢复地继续执行', desc:'恢复 run-2087 上下文,执行 UPDATE(37 行),回滚脚本已存档。', execId:'x2087b', exec:[
+            {t:'10:36', tool:'RESUME', text:'恢复 run-2087 会话上下文(27 条历史工具调用)· 携带授权令牌 D-1042'},
+            {t:'10:36', tool:'BASH', text:'pg_dump 受影响 37 行 → rollback-2087.sql 存档'},
+            {t:'10:37', tool:'BASH', text:'psql UPDATE orders SET …(37 rows)✓ 单次放行'},
+            {t:'10:38', tool:'TEST', text:'校验查询 → 0 条重复扣款残留'},
+          ]});
+          ev.push({kind:'out', actor:'回传', time:'10:38', title:'结果回传入口', desc:'摘要回 Slack 线程,Linear BAT-284 关闭,PR #412 合并。人全程零中转。'});
+          ev.push({kind:'learn', actor:'沉淀', time:'10:38', title:'经验沉淀', desc:'LEARNED_PATTERNS 更新;生成规则候选 RC-77「staging 回填可自动放行」,等待确认。', linkLabel:'查看规则候选', linkTo:{view:'auth'}});
+        } else {
+          ev.push({kind:'runtime', actor:'Runtime', time:'刚刚', title:'恢复中…', desc:'正在恢复 run-2087 上下文。'});
+        }
+      }
+      return ev;
+    }
+    if(tk.id==='t2085'){
+      return [
+        {kind:'entry', actor:'Linear', time:'09:10', title:'任务指派', desc:'BAT-291 指派给 @王雨桐,路由到其个人分身。'},
+        {kind:'agent', actor:'王雨桐的分身', time:'09:10', title:'分身接管', desc:'读取 BAT-291 上下文与历史相关决策,授权检查通过。', execId:'a2085', execHead:'分身 orchestrator · 接管决策过程', exec:[
+          {t:'09:10', tool:'READ', text:'拉取 Linear BAT-291 描述、评论与关联 PR'},
+          {t:'09:10', tool:'READ', text:'加载记忆:通知服务历史决策 D-987(v1 迁移复盘)'},
+          {t:'09:10', tool:'PLAN', text:'识别为架构迁移 → 双方案并行验证策略'},
+          {t:'09:11', tool:'BASH', text:'授权预检通过 · 派发 Claude Code,workspace run-2085'},
+        ]},
+        {kind:'runtime', actor:'Claude Code', time:'09:12–09:58', title:'两套方案并行验证', desc:'双写过渡 vs 版本化 /v2,契约测试均通过。', execId:'x2085a', exec:[
+          {t:'09:12', tool:'PLAN', text:'并行分支:方案 A 双写过渡 / 方案 B 版本化 /v2'},
+          {t:'09:15', tool:'EDIT', text:'api/notify/schema.json · 两分支各自变更'},
+          {t:'09:34', tool:'TEST', text:'契约测试 billing / crm / mobile-push → 两方案均通过'},
+          {t:'09:52', tool:'WRITE', text:'notify-v2-plan.md · 方案对比(成本 / 技术债 / 回滚路径)'},
+          {t:'09:58', tool:'GATE', text:'方向选择需人决策 → 挂起,生成 D-1041'},
+        ]},
+        {kind:'gate', actor:'Human Gate', time:'09:58', title:'方向选择 · 生成决策 D-1041', desc:'影响 3 个下游消费者,属方向选择类决策。', linkLabel:'打开决策 D-1041', linkTo:{view:'inbox', sel:'d1041'}},
+        {kind:'decision', actor: S.dstat['d1041']==='pending'?'等待决策':'决策中心', time: S.dstat['d1041']==='pending'?'现在':'刚刚', title: S.dstat['d1041']==='pending'?'等待王雨桐决策':'已决策', desc: S.dstat['d1041']==='pending'?'证据包含方案对比与契约测试报告。':'任务已恢复,按所选方案继续迁移。'},
+      ];
+    }
+    if(tk.id==='t2082'){
+      const merged = S.dstat['d1039']!=='pending';
+      const ev = [
+        {kind:'entry', actor:'GitHub', time:'昨天 16:40', title:'Issue 指派', desc:'CI flaky 追踪 issue 指派 @李哲,分身接管。'},
+        {kind:'agent', actor:'李哲的分身', time:'16:41', title:'低风险 · 全程自动', desc:'改动仅涉测试代码,在授权范围内,未触发 Human Gate。', execId:'a2082', execHead:'分身 orchestrator · 接管决策过程', exec:[
+          {t:'16:41', tool:'READ', text:'解析 issue:3 个 flaky 用例 · 仅测试代码'},
+          {t:'16:41', tool:'PLAN', text:'风险评估:低 · 授权范围内可全程自动'},
+          {t:'16:41', tool:'BASH', text:'派发 Claude Code,workspace run-2082'},
+        ]},
+        {kind:'runtime', actor:'Claude Code', time:'16:42–17:30', title:'定位竞态并修复', desc:'重写等待逻辑,连续 20 次 CI 全绿。', execId:'x2082a', exec:[
+          {t:'16:42', tool:'BASH', text:'重跑 checkout.spec.ts ×50 → 3 次失败,竞态确认'},
+          {t:'16:55', tool:'READ', text:'tests/e2e/checkout.spec.ts · 定位固定 sleep 等待'},
+          {t:'17:06', tool:'EDIT', text:'重写等待逻辑:轮询断言替代固定 sleep'},
+          {t:'17:12', tool:'EDIT', text:'.github/workflows/ci.yml · 重试策略'},
+          {t:'17:30', tool:'TEST', text:'CI ×20 → 全绿'},
+          {t:'17:31', tool:'GATE', text:'请求合并到 main → 命中审批策略,生成 D-1039,任务挂起'},
+        ]},
+        {kind:'gate', actor:'Human Gate', time:'17:31', title:'合并审批 · D-1039', desc:'按策略,合并 main 一律需要审批。', linkLabel:'打开决策 D-1039', linkTo:{view:'inbox', sel:'d1039'}},
+      ];
+      if(merged){
+        ev.push({kind:'out', actor:'回传', time:'刚刚', title:'PR #408 合并', desc:'结果回传 GitHub 与 Slack,任务关闭。'});
+      } else {
+        ev.push({kind:'decision', actor:'等待决策', time:'现在', title:'等待合并审批', desc:'20/20 全绿,证据包含 flaky 根因分析。'});
+      }
+      return ev;
+    }
+    return [
+      {kind:'entry', actor:'ClickUp', time:'07:00', title:'定时任务触发', desc:'每周一竞品价格监控周报,自动创建任务。'},
+      {kind:'agent', actor:'李哲的分身', time:'07:00', title:'分身接管', desc:'引用偏好「结论先行 · SKU 去重口径」组织报告结构。', execId:'a2079', execHead:'分身 orchestrator · 接管决策过程', exec:[
+        {t:'07:00', tool:'READ', text:'读取 ClickUp 定时任务模板与上周报告'},
+        {t:'07:00', tool:'READ', text:'加载偏好 PREFERENCES.md:结论先行 · SKU 去重口径'},
+        {t:'07:01', tool:'PLAN', text:'报告结构:结论 → 变动明细 → 附录'},
+        {t:'07:01', tool:'BASH', text:'派发 Claude Code,workspace run-2079'},
+        {t:'07:24', tool:'GATE', text:'发现「降价 SKU 数」存在两种口径 → 询问口径,生成 D-1038,任务挂起'},
+      ]},
+      {kind:'gate', actor:'Human Gate', time:'07:24', title:'口径确认 · D-1038', desc:'两种统计口径需补充确认,低风险 clarification。', linkLabel:'打开决策 D-1038', linkTo:{view:'inbox', sel:'d1038'}},
+      {kind:'decision', actor:'决策中心', time:'08:02', title:'李哲确认口径(Slack 按钮)', desc:'按 SKU 去重 · 该偏好已写入 PREFERENCES.md。'},
+      {kind:'runtime', actor:'Claude Code', time:'08:02–', title:'审批通过 · 恢复执行,生成周报', desc:'reports/pricing-w27.md 撰写中,预计 10 分钟后回传 ClickUp。', execId:'x2079a', exec:[
+        {t:'08:02', tool:'RESUME', text:'恢复 run-2079 会话上下文 · 写入已确认口径(SKU 去重)'},
+        {t:'08:03', tool:'BASH', text:'拉取本周价格快照 · 3 竞品 · 1,204 SKU'},
+        {t:'08:05', tool:'WRITE', text:'reports/pricing-w27.md · 结论先行结构,撰写中…'},
+      ]},
+    ];
+  }
+}
+</script>
+</body>
+</html>

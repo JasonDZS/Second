@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".codex/hooks/second_policy_hook.js\" PreToolUse",
+            "timeout": 30,
+            "statusMessage": "Second Human Gate policy check"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".codex/hooks/second_policy_hook.js\" PermissionRequest",
+            "timeout": 30,
+            "statusMessage": "Second approval policy check"
+          }
+        ]
+      }
+    ]
+  }
+}

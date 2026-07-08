@@ -1,0 +1,18 @@
+services:
+  second:
+    build: .
+    ports:
+      - "7317:7317"
+    environment:
+      HOST: 0.0.0.0
+      SECOND_PORT: 7317
+      SECOND_SLACK_SOCKET_MODE: ${SECOND_SLACK_SOCKET_MODE:-}
+      SECOND_SLACK_DECISION_CHANNEL: ${SECOND_SLACK_DECISION_CHANNEL:-}
+      SECOND_SLACK_ALLOWED_USERS: ${SECOND_SLACK_ALLOWED_USERS:-}
+      SECOND_SLACK_ALLOWED_CHANNELS: ${SECOND_SLACK_ALLOWED_CHANNELS:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+    volumes:
+      - ./.second:/app/.second
+      - ${HOME}/.codex:/root/.codex:ro

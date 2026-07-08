@@ -1,0 +1,15 @@
+.second/
+node_modules/
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

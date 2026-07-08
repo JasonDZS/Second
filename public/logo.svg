@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Second logo</title>
+  <desc id="desc">Rounded square Second mark with two curved strokes.</desc>
+  <rect x="1.5" y="1.5" width="93" height="93" rx="25" fill="#f3f1ec" stroke="#e9e4da" stroke-opacity="0.26" stroke-width="3"/>
+  <g transform="translate(11.52 11.52) scale(0.76)" fill="none">
+    <path d="M66 26C66 26 52 20 42 26C32 32 34 42 44 46L56 51" stroke="#d9560b" stroke-width="11" stroke-linecap="round"/>
+    <path d="M40 45L52 50C62 54 64 64 54 70C44 76 30 70 30 70" stroke="#1d1b17" stroke-width="11" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+[features]
+hooks = true
+rules = true
+
+[mcp_servers.second-decision]
+command = "node"
+args = ["bin/second.js", "mcp", "serve"]
+
+[mcp_servers.second-decision.env]
+SECOND_DAEMON = "localhost:7317"
+
+[mcp_servers.second-decision.tools.decision_request]
+approval_mode = "approve"
