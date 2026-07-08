@@ -13,6 +13,9 @@
       profile: profileSignature(nextState.profile),
       rules: nextState.rules?.length || 0,
       pending: nextState.metrics?.pendingDecisions || 0,
+      activeTasks: activeTaskCount(nextState),
+      assistantOpen: Boolean(ui.assistantOpen),
+      assistant: assistantSignature(nextState),
     };
     if (ui.profilePanel) {
       return stableJson({
@@ -49,6 +52,27 @@
         ...sidebar,
         decisions: (nextState.decisions || []).map(decisionSignature),
         metrics: mobileMetricsSignature(nextState.metrics),
+        mobilePwa: mobilePwaSignature(nextState.integrations?.mobilePwa),
+        publicAccess: publicAccessSignature(nextState.integrations?.publicAccess),
+      });
+    }
+    if (ui.view === "onboarding") {
+      return stableJson({
+        ...sidebar,
+        onboardingStep: ui.onboardingStep,
+        onboardingAuthLevel: ui.onboardingAuthLevel,
+        onboardingMobileSkipped: Boolean(ui.onboardingMobileSkipped),
+        onboardingPushEnabled: ui.onboardingPushEnabled,
+        onboardingDemoText: ui.onboardingDemoText,
+        mobilePairingUrl: ui.mobilePairingUrl,
+        mobilePairingLoading: Boolean(ui.mobilePairingLoading),
+        mobileMockStatus: ui.mobileMockStatus,
+        daemon: nextState.daemon,
+        engines: nextState.engines,
+        integrations: nextState.integrations,
+        profile: profileSignature(nextState.profile),
+        rules: nextState.rules,
+        settings: nextState.settings,
       });
     }
     return stableJson({
@@ -61,6 +85,7 @@
       metrics: nextState.metrics,
       events: (nextState.events || []).slice(0, 20),
       tasks: (nextState.tasks || []).map(taskSignature),
+      settingsChannelConfig: ui.settingsChannelConfig || null,
     });
   }
 
@@ -116,6 +141,34 @@
     };
   }
 
+  function assistantSignature(state = {}) {
+    return {
+      activeConversationId: state.assistant?.activeConversationId || "local-assistant",
+      messages: (state.assistant?.messages || []).map((message) => ({
+        id: message.id,
+        role: message.role,
+        at: message.at,
+        text: message.text,
+        status: message.status,
+        taskId: message.taskId,
+        inReplyTo: message.inReplyTo,
+        conversationId: message.conversationId,
+      })),
+      tasks: (state.tasks || [])
+        .filter((task) => task.channel?.id === "assistant")
+        .map((task) => ({
+          id: task.id,
+          status: task.status,
+          summary: task.summary,
+          startedAt: task.startedAt,
+          completedAt: task.completedAt,
+          messageId: task.channel?.external?.messageId,
+          resumeMessageId: task.lastResumeRequest?.external?.messageId,
+          followups: (task.channelFollowups || []).map((followup) => followup.external?.messageId),
+        })),
+    };
+  }
+
   function mobileMetricsSignature(metrics = {}) {
     return {
       completedTasks: metrics.completedTasks,
@@ -125,12 +178,53 @@
     };
   }
 
+  function mobilePwaSignature(push = {}) {
+    return {
+      paired: Boolean(push.paired),
+      publicUrl: push.publicUrl,
+      subscriptionCount: push.subscriptionCount || 0,
+      supported: Boolean(push.supported),
+      subscriptions: (push.subscriptions || []).map((subscription) => ({
+        id: subscription.id,
+        label: subscription.label,
+        endpointHost: subscription.endpointHost,
+        createdAt: subscription.createdAt,
+        lastSeenAt: subscription.lastSeenAt,
+      })),
+    };
+  }
+
+  function publicAccessSignature(access = {}) {
+    return {
+      enabled: Boolean(access.enabled),
+      provider: access.provider,
+      activeUrl: access.activeUrl,
+      manualUrl: access.manualUrl,
+      status: access.status,
+      lastCheck: access.lastCheck,
+      lastError: access.lastError,
+    };
+  }
+
+  function activeTaskCount(state = {}) {
+    if (Array.isArray(state.tasks)) {
+      return state.tasks.filter((task) => (
+        !task.archivedAt && ["running", "needs_human", "pending_resume", "resuming"].includes(task.status)
+      )).length;
+    }
+    return Number(state.metrics?.runningTasks || 0);
+  }
+
   function stableJson(value) {
     return JSON.stringify(value);
   }
 
   return {
+    activeTaskCount,
     decisionSignature,
+    assistantSignature,
+    mobilePwaSignature,
+    publicAccessSignature,
     mobileMetricsSignature,
     profileSignature,
     renderSignature,

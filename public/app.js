@@ -6,6 +6,7 @@
   const AuthView = globalThis.SecondAuthView || window.SecondAuthView || {};
   const InboxView = globalThis.SecondInboxView || window.SecondInboxView || {};
   const MobileView = globalThis.SecondMobileView || window.SecondMobileView || {};
+  const OnboardingView = globalThis.SecondOnboardingView || window.SecondOnboardingView || {};
   const TaskTraceFormat = globalThis.SecondTaskTraceFormat || window.SecondTaskTraceFormat || {};
   const TaskTraceSourceView = globalThis.SecondTaskTraceSourceView || window.SecondTaskTraceSourceView || {};
   const TaskTraceAgentView = globalThis.SecondTaskTraceAgentView || window.SecondTaskTraceAgentView || {};
@@ -16,6 +17,9 @@
   const ShellView = globalThis.SecondShellView || window.SecondShellView || {};
   const RenderSignature = globalThis.SecondRenderSignature || window.SecondRenderSignature || {};
   const SlackSettings = globalThis.SecondSlackSettings || window.SecondSlackSettings || {};
+  const AssistantWidget = globalThis.SecondAssistantWidget || window.SecondAssistantWidget || {};
+  const QrCode = globalThis.SecondQrCode || window.SecondQrCode || {};
+  const MobilePwa = globalThis.SecondMobilePwa || window.SecondMobilePwa || {};
   const Actions = globalThis.SecondActions || window.SecondActions || {};
   const ui = UiStore.createInitialState
     ? UiStore.createInitialState()
@@ -28,13 +32,32 @@
         toast: null,
         taskPrompt: "",
         taskWorkspace: "",
+        publicAccessForm: null,
         slackForm: null,
         slackManifest: "",
+        settingsChannelConfig: null,
+        assistantOpen: false,
+        assistantDraft: "",
+        assistantConversationId: "local-assistant",
+        mobileExpanded: {},
+        mobileReplyDrafts: {},
+        mobileReplyOpen: {},
+        mobilePairingError: "",
+        mobilePairingLoading: false,
+        mobilePairingQrSvg: "",
+        mobilePairingUrl: "",
+        mobileMockStatus: "idle",
+        onboardingStep: 0,
+        onboardingAuthLevel: "balanced",
         profilePanel: false,
         profileForm: null,
+        onboardingMobileSkipped: false,
+        onboardingPushEnabled: false,
+        onboardingTryPhase: 0,
         replyDrafts: {},
         busy: false,
       };
+  applyInitialLocation(ui);
   let state = null;
   let toastTimer = null;
   let lastRenderedView = null;
@@ -99,6 +122,7 @@
     brandMark,
     escapeAttr,
     escapeHtml,
+    relativeTime,
   });
   const settingsViewRenderer = SettingsView.createSettingsView({
     PRODUCT_NAME,
@@ -111,6 +135,17 @@
     latestSlackStatus,
     relativeTime,
   });
+  const onboardingViewRenderer = OnboardingView.createOnboardingView
+    ? OnboardingView.createOnboardingView({
+        PRODUCT_NAME,
+        PRODUCT_LOGO_SOURCES,
+        engineStatus,
+        escapeAttr,
+        escapeHtml,
+        latestSlackStatus,
+        relativeTime,
+      })
+    : null;
   const taskTraceFormat = TaskTraceFormat.createTaskTraceFormat
     ? TaskTraceFormat.createTaskTraceFormat({ PRODUCT_NAME })
     : {};
@@ -167,14 +202,24 @@
     taskStatus,
     uptime,
   });
+  const assistantWidgetRenderer = AssistantWidget.createAssistantWidget
+    ? AssistantWidget.createAssistantWidget({
+        escapeAttr,
+        escapeHtml,
+        relativeTime,
+      })
+    : null;
 
   const handleAction = Actions.createActionHandler({
+    MobilePwa,
     PRODUCT_NAME,
+    QrCode,
     UiStore,
     api,
     app,
     cssEscape,
     currentProfileForm,
+    currentPublicAccessForm,
     currentSlackForm,
     getState: () => state,
     profileFormFromState,
@@ -184,6 +229,7 @@
     render,
     showToast,
     slackFormFromPublic,
+    publicAccessFormFromState,
     ui,
     updateProfileModalPreview,
   });
@@ -191,6 +237,13 @@
   app.addEventListener("click", (event) => {
     const target = event.target.closest("[data-action]");
     if (!target) return;
+    if (
+      target.dataset.action === "close-settings-channel-config" &&
+      target.classList.contains("settings-channel-backdrop") &&
+      event.target !== target
+    ) {
+      return;
+    }
     event.preventDefault();
     handleAction(target.dataset, target);
   });
@@ -203,6 +256,11 @@
       form[event.target.dataset.slackField] =
         event.target.type === "checkbox" ? event.target.checked : event.target.value;
     }
+    if (event.target.matches("[data-public-access-field]")) {
+      const form = currentPublicAccessForm();
+      form[event.target.dataset.publicAccessField] =
+        event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    }
     if (event.target.matches("[data-profile-field]")) {
       const form = currentProfileForm();
       form[event.target.dataset.profileField] = event.target.value;
@@ -211,12 +269,34 @@
     if (event.target.matches("[data-reply-field]")) {
       ui.replyDrafts[event.target.dataset.decisionId] = event.target.value;
     }
+    if (event.target.matches("[data-assistant-field='draft']")) {
+      ui.assistantDraft = event.target.value;
+    }
+    if (event.target.matches("[data-mobile-reply-field]")) {
+      if (!ui.mobileReplyDrafts) ui.mobileReplyDrafts = {};
+      const id = event.target.dataset.id;
+      ui.mobileReplyDrafts[id] = event.target.value;
+      syncMobileReplySendButton(id, event.target.value);
+    }
+  });
+
+  app.addEventListener("keydown", (event) => {
+    if (!event.target.matches("[data-assistant-field='draft']")) return;
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    handleAction({ action: "assistant-send" }, event.target);
   });
 
   app.addEventListener("change", (event) => {
     if (event.target.matches("[data-slack-field]")) {
       const form = currentSlackForm();
       form[event.target.dataset.slackField] =
+        event.target.type === "checkbox" ? event.target.checked : event.target.value;
+      render();
+    }
+    if (event.target.matches("[data-public-access-field]")) {
+      const form = currentPublicAccessForm();
+      form[event.target.dataset.publicAccessField] =
         event.target.type === "checkbox" ? event.target.checked : event.target.value;
       render();
     }
@@ -230,6 +310,7 @@
   init();
 
   async function init() {
+    MobilePwa.register?.().catch(() => {});
     await refresh();
     connectEvents();
   }
@@ -237,6 +318,7 @@
   async function refresh() {
     state = await api("/api/state");
     if (!ui.slackForm) ui.slackForm = slackFormFromState();
+    if (!ui.publicAccessForm) ui.publicAccessForm = publicAccessFormFromState();
     reconcileSelection();
     render();
   }
@@ -297,18 +379,21 @@
         ${sidebar()}
         <main class="main">${mainView()}</main>
         ${ui.profilePanel ? profileSettingsModal() : ""}
+        ${assistantWidget()}
         ${ui.toast ? `<div class="toast">${escapeHtml(ui.toast)}</div>` : ""}
       </div>
     `;
     restoreScrollState(restore);
     lastRenderedView = ui.view;
     lastRenderSignature = renderSignature(state);
+    ensureMobilePairing();
+    MobileView.enhanceCarousels?.(app);
   }
 
   function captureScrollState() {
     if (lastRenderedView !== ui.view) return null;
     const scrollTop = {};
-    for (const selector of [".main", ".page", ".list-pane", ".detail-pane", ".scroll-list"]) {
+    for (const selector of [".main", ".page", ".list-pane", ".detail-pane", ".scroll-list", ".mobile-phone-scroll"]) {
       const element = app.querySelector(selector);
       if (element) scrollTop[selector] = element.scrollTop || 0;
     }
@@ -345,6 +430,7 @@
     if (ui.view === "runtime") return runtimeView();
     if (ui.view === "auth") return authView();
     if (ui.view === "mobile") return mobileView();
+    if (ui.view === "onboarding") return onboardingView();
     if (ui.view === "settings") return settingsView();
     return inboxView();
   }
@@ -366,11 +452,20 @@
   }
 
   function mobileView() {
-    return mobileViewRenderer.render(state);
+    return mobileViewRenderer.render(state, ui, MobilePwa.supported?.(), { surface: "console" });
+  }
+
+  function onboardingView() {
+    if (!onboardingViewRenderer) return shellView.emptyPage("初始化", "引导页模块未加载。");
+    return onboardingViewRenderer.render(state, ui, currentSlackForm, currentPublicAccessForm);
   }
 
   function settingsView() {
-    return settingsViewRenderer.render(state, ui, currentSlackForm);
+    return settingsViewRenderer.render(state, ui, currentSlackForm, currentPublicAccessForm);
+  }
+
+  function assistantWidget() {
+    return assistantWidgetRenderer ? assistantWidgetRenderer.render(state, ui) : "";
   }
 
   function currentSlackForm() {
@@ -381,6 +476,19 @@
   function slackFormFromState() {
     const slack = state?.integrations?.slack || {};
     return slackFormFromPublic(slack);
+  }
+
+  function currentPublicAccessForm() {
+    if (!ui.publicAccessForm) ui.publicAccessForm = publicAccessFormFromState();
+    return ui.publicAccessForm;
+  }
+
+  function publicAccessFormFromState() {
+    const access = state?.integrations?.publicAccess || state?.settings?.publicAccess || {};
+    return {
+      provider: access.provider || "manual",
+      manualUrl: access.manualUrl || "",
+    };
   }
 
   function currentProfileForm() {
@@ -412,6 +520,54 @@
         }
       }
     }
+  }
+
+  function applyInitialLocation(targetUi) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get("view");
+      if (view) targetUi.view = view;
+      const decision = params.get("decision");
+      if (decision) {
+        targetUi.view = "mobile";
+        targetUi.selectedDecision = decision;
+      }
+    } catch {
+      // URL parsing should never prevent the console from starting.
+    }
+  }
+
+  function ensureMobilePairing() {
+    const shouldEnsure = ui.view === "mobile" || (ui.view === "onboarding" && ui.onboardingStep === 3 && !ui.onboardingMobileSkipped);
+    if (!shouldEnsure) return;
+    if (ui.mobilePairingUrl || ui.mobilePairingLoading || ui.mobilePairingError) return;
+    ui.mobilePairingLoading = true;
+    api("/api/mobile/pairing")
+      .then((result) => {
+        ui.mobilePairingUrl = result.url || "";
+        ui.mobilePairingQrSvg = QrCode.toSvg && ui.mobilePairingUrl
+          ? QrCode.toSvg(ui.mobilePairingUrl, {
+              className: "mobile-qr-svg",
+              label: "Second 移动端配对二维码",
+              title: "Second mobile pairing",
+            })
+          : "";
+        ui.mobilePairingError = "";
+      })
+      .catch((error) => {
+        ui.mobilePairingError = error.message || "配对二维码生成失败";
+      })
+      .finally(() => {
+        ui.mobilePairingLoading = false;
+        scheduleRender();
+      });
+  }
+
+  function syncMobileReplySendButton(id, value) {
+    const escape = typeof cssEscape === "function" ? cssEscape : (text) => String(text || "").replace(/["\\]/g, "\\$&");
+    const button = app.querySelector(`[data-action="mobile-send-decision-reply"][data-id="${escape(id)}"]`);
+    if (!button) return;
+    button.disabled = ui.busy === `mobile-reply-${id}` || !String(value || "").trim();
   }
 
   async function api(url, options = {}) {

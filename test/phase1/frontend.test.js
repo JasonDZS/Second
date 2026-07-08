@@ -8,6 +8,7 @@ const {
   apiClient,
   appendDecisionReply,
   assert,
+  assistantWidgetUi,
   authViewUi,
   buildChannelFollowupPrompt,
   buildInitialPrompt,
@@ -31,11 +32,13 @@ const {
   httpStatic,
   inboxViewUi,
   mobileViewUi,
+  onboardingViewUi,
   os,
   path,
   prepareCodexRuntimeFiles,
   presentation,
   profileUi,
+  qrCodeUi,
   renderSignatureUi,
   runtimeRecovery,
   runtimeResume,
@@ -178,10 +181,96 @@ test("frontend UI store creates isolated state containers", () => {
   const second = uiStore.createInitialState();
   assert.equal(first.view, "inbox");
   assert.equal(first.busy, false);
+  assert.equal(first.assistantOpen, false);
+  assert.equal(first.assistantConversationId, "local-assistant");
+  assert.equal(first.mobilePairingUrl, "");
+  assert.deepEqual(first.mobileReplyDrafts, {});
+  assert.deepEqual(first.mobileReplyOpen, {});
+  assert.equal(first.onboardingMobileSkipped, false);
   assert.notEqual(first.execOpen, second.execOpen);
   assert.equal(uiStore.toggleFlag(first.execOpen, "bundle-1"), true);
   assert.equal(first.execOpen["bundle-1"], true);
   assert.equal(second.execOpen["bundle-1"], undefined);
+});
+
+test("frontend QR helper renders a scannable SVG for mobile pairing links", () => {
+  const svg = qrCodeUi.toSvg("http://127.0.0.1:7318/mobile.html?pair=test", {
+    className: "mobile-qr-svg",
+    title: "Second mobile pairing",
+  });
+
+  assert.match(svg, /^<svg/);
+  assert.match(svg, /viewBox="0 0 57 57"/);
+  assert.match(svg, /class="mobile-qr-svg"/);
+  assert.match(svg, /<path fill="#1d1b17"/);
+  assert.match(svg, /Second mobile pairing/);
+});
+
+test("frontend assistant widget renders floating chat history and pending task state", () => {
+  const widget = assistantWidgetUi.createAssistantWidget(presentation);
+  const state = {
+    assistant: {
+      activeConversationId: "local-assistant",
+      messages: [
+        {
+          id: "AM-1",
+          role: "user",
+          actor: "你",
+          text: "总结今天的阻塞项",
+          at: "2026-07-08T08:00:00.000Z",
+          conversationId: "local-assistant",
+        },
+        {
+          id: "AM-2",
+          role: "assistant",
+          actor: "测试分身",
+          text: "状态正常。\n\n- 时间: `2026-07-08 12:07:43 CST`\n- 系统: **macOS**\n\n<img src=x onerror=alert(1)>",
+          at: "2026-07-08T08:00:02.000Z",
+          conversationId: "local-assistant",
+          inReplyTo: "AM-1",
+        },
+      ],
+    },
+    tasks: [
+      {
+        id: "T-assistant",
+        status: "running",
+        agent: "测试分身",
+        startedAt: "2026-07-08T08:00:01.000Z",
+        channel: { id: "assistant", external: { messageId: "AM-1" } },
+      },
+    ],
+  };
+
+  const launcher = widget.render(state, { assistantOpen: false });
+  assert.match(launcher, /assistant-launcher/);
+  assert.match(launcher, /assistant-launcher-badge/);
+
+  const panel = widget.render(state, { assistantOpen: true, assistantDraft: "继续" });
+  assert.match(panel, /assistant-panel/);
+  assert.match(panel, /总结今天的阻塞项/);
+  assert.match(panel, /<ul><li>时间: <code>2026-07-08 12:07:43 CST<\/code><\/li><li>系统: <strong>macOS<\/strong><\/li><\/ul>/);
+  assert.match(panel, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(panel, /<img src=x/);
+  assert.match(panel, /data-assistant-field="draft"/);
+});
+
+test("frontend assistant markdown renderer supports code blocks and ordered lists safely", () => {
+  const html = assistantWidgetUi.renderAssistantMarkdown([
+    "## 检查结果",
+    "",
+    "1. `daemon` 在线",
+    "2. **API** 正常",
+    "",
+    "```",
+    "<script>alert(1)</script>",
+    "```",
+  ].join("\n"));
+
+  assert.match(html, /<h2>检查结果<\/h2>/);
+  assert.match(html, /<ol><li><code>daemon<\/code> 在线<\/li><li><strong>API<\/strong> 正常<\/li><\/ol>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
 });
 
 test("frontend presentation helpers format status, exec rows, and escaping", () => {
@@ -222,6 +311,27 @@ test("frontend render signatures ignore unrelated runtime noise for inbox view",
       ui,
     ),
   );
+
+  const mobileUi = { view: "mobile" };
+  const mobileBase = {
+    ...baseState,
+    metrics: { pendingDecisions: 0 },
+    integrations: { mobilePwa: { subscriptionCount: 0, subscriptions: [] } },
+  };
+  const mobileFirst = renderSignatureUi.renderSignature(mobileBase, mobileUi);
+  const mobileSecond = renderSignatureUi.renderSignature(
+    {
+      ...mobileBase,
+      integrations: {
+        mobilePwa: {
+          subscriptionCount: 1,
+          subscriptions: [{ id: "sub-1", label: "iOS · Safari", endpointHost: "web.push.apple.com" }],
+        },
+      },
+    },
+    mobileUi,
+  );
+  assert.notEqual(mobileFirst, mobileSecond);
 });
 
 test("frontend shell view renders navigation and profile modal through a focused module", () => {
@@ -234,15 +344,35 @@ test("frontend shell view renders navigation and profile modal through a focused
     {
       profile: { name: "Jason", tagline: "主要做算法/模型/智能体" },
       rules: [{ id: "R-1" }, { id: "R-2" }],
-      metrics: { pendingDecisions: 2, runningTasks: 1 },
+      metrics: { pendingDecisions: 2, runningTasks: 99 },
+      tasks: [
+        { id: "T-1", status: "running" },
+        { id: "T-2", status: "needs_human" },
+        { id: "T-3", status: "paused" },
+        { id: "T-4", status: "done" },
+      ],
       engines: [{ id: "codex", status: "ok" }],
       settings: { defaultEngine: "codex" },
     },
     { view: "tasks" },
   );
-  assert.match(html, /任务/);
+  assert.match(html, /<span>任<\/span><span>务<\/span>/);
+  assert.match(html, /nav-label short/);
+  assert.match(html, /nav-fill/);
   assert.match(html, /nav-badge/);
+  assert.match(html, /nav-inbox[\s\S]*?<span class="nav-badge">2<\/span>/);
+  assert.match(html, /nav-tasks[\s\S]*?<span class="nav-badge">2<\/span>/);
+  assert.equal(shellViewUi.activeTaskCount({ tasks: [{ status: "running" }, { status: "paused" }, { status: "needs_human" }] }), 2);
+  assert.equal(shellViewUi.activeTaskCount({ metrics: { runningTasks: 3 } }), 3);
   assert.match(html, /Jason/);
+  assert.doesNotMatch(html, /主要做算法/);
+  assert.match(html, /初始化引导/);
+  assert.match(html, /真实手机端/);
+  assert.doesNotMatch(html, /手机端 mock/);
+  assert.doesNotMatch(html, /本地分身 adapter/);
+  assert.doesNotMatch(html, /run 队列/);
+  assert.match(html, /data-view="onboarding"/);
+  assert.doesNotMatch(html, /setup-entry-count/);
 
   const modal = shell.profileSettingsModal(profileUi.profileFormFromState({ name: "Jason" }), {});
   assert.match(modal, /data-action="random-profile-avatar"/);
@@ -315,15 +445,35 @@ test("frontend inbox view renders decisions, options, and reply composer", () =>
   assert.match(html, /查看完整 Trace/);
 });
 
-test("frontend mobile view renders pending decisions with phone and Slack controls", () => {
+test("frontend mobile view renders PWA push controls and pending decisions", () => {
   const mobile = mobileViewUi.createMobileView({
     PRODUCT_NAME: "Second",
     ...presentation,
     brandMark: (className) => `<span class="${className}">S</span>`,
   });
+  const pairingUrl = "https://second.example.com/mobile.html?pair=test";
+  const pairingQrSvg = qrCodeUi.toSvg(pairingUrl, { className: "mobile-qr-svg" });
   const html = mobile.render({
     profile: { agentName: "测试分身" },
     metrics: { completedTasks: 2, highRiskBlocks: 1, zeroHandoffRate: 100 },
+    integrations: {
+      publicAccess: {
+        enabled: true,
+        activeUrl: "https://second.example.com",
+        status: "online",
+      },
+      mobilePwa: {
+        subscriptionCount: 1,
+        subscriptions: [
+          {
+            id: "sub-1",
+            label: "iOS · Safari",
+            endpointHost: "web.push.apple.com",
+            lastSeenAt: "2026-07-08T00:05:00.000Z",
+          },
+        ],
+      },
+    },
     decisions: [
       {
         id: "D-1",
@@ -332,49 +482,305 @@ test("frontend mobile view renders pending decisions with phone and Slack contro
         risk: "中",
         taskId: "T-1",
         agent: "测试分身",
+        selectedOption: "a",
+        options: [
+          { id: "a", label: "批准", description: "继续当前方案", recommended: true },
+          { id: "b", label: "拒绝", description: "要求调整" },
+        ],
       },
     ],
-  });
+  }, {
+    busy: false,
+    mobileExpanded: { "D-1": true },
+    mobileReplyDrafts: { "D-1": "请补充凭证位置" },
+    mobileReplyOpen: { "D-1": true },
+    mobilePairingQrSvg: pairingQrSvg,
+    mobilePairingUrl: pairingUrl,
+  }, { available: true, permission: "default" });
 
-  assert.match(html, /轻决策/);
+  assert.match(html, /消息端/);
+  assert.match(html, /手机决策端/);
+  assert.match(html, /mobile-phone-device/);
+  assert.match(html, /mobile-notification-center/);
+  assert.match(html, /Second · 决策请求/);
+  assert.match(html, /mobile-lock-hint/);
+  assert.match(html, /点开处理/);
+  assert.doesNotMatch(html, /mobile-lock-action primary/);
+  assert.match(html, /mobile-sticky-top/);
+  assert.match(html, /mobile-settings-bar/);
+  assert.match(html, /mobile-card-detail/);
+  assert.match(html, /mobile-device-card/);
+  assert.match(html, /mobile-public-access-card ready/);
+  assert.match(html, /手机公网通道/);
+  assert.match(html, /iOS · Safari/);
+  assert.match(html, /web\.push\.apple\.com/);
+  assert.match(html, /data-action="mobile-delete-subscription"/);
+  assert.match(html, /mobile-card-carousel/);
+  assert.match(html, /mobile-carousel-dots/);
+  assert.match(html, /data-action="mobile-push-subscribe"/);
+  assert.match(html, /data-action="mobile-push-test"/);
+  assert.match(html, /data-action="mobile-copy-pairing-link"/);
+  assert.match(html, /data-action="mobile-refresh-pairing"/);
+  assert.match(html, /data-action="mobile-toggle-decision"/);
+  assert.match(html, /data-action="mobile-toggle-reply"/);
+  assert.match(html, /data-action="mobile-send-decision-reply"/);
+  assert.match(html, /发送给智能体/);
+  assert.match(html, /data-mobile-reply-field/);
+  assert.match(html, /请补充凭证位置/);
+  assert.match(html, /data-action="mobile-resolve-decision"/);
   assert.match(html, /data-verdict="approved"/);
-  assert.match(html, /Slack · 审批按钮消息/);
+  assert.match(html, /继续当前方案/);
+  assert.match(html, /mobile-evidence-drawer/);
+  assert.match(html, /mobile-pairing-card/);
+  assert.match(html, /mobile-qr-svg/);
+  assert.match(html, /手机相机扫描/);
+  assert.match(html, /公开服务地址/);
+  const css = fs.readFileSync(path.join(__dirname, "../../public/styles.css"), "utf8");
+  assert.match(css, /\.mobile-card-detail\s*\{[^}]*overflow-y: auto/s);
+  assert.match(css, /\.mobile-card-carousel\s*\{[^}]*max-width: 100%/s);
+  assert.match(css, /\.mobile-card-carousel > \.mobile-decision-card\s*\{[^}]*max-width: 100%/s);
+  assert.match(css, /\.mobile-decision-card\.resolved\s*\{[^}]*max-height: 248px/s);
+  assert.match(css, /\.mobile-reply-composer textarea\s*\{[^}]*font-size: 16px/s);
+  assert.match(css, /\.mobile-app-surface input,\s*\.mobile-app-surface textarea,\s*\.mobile-app-surface select\s*\{[^}]*font-size: 16px/s);
+  assert.doesNotMatch(css, /\.mobile-card-carousel\s*\{[^}]*margin: 0 -16px/s);
+  assert.doesNotMatch(css, /\.mobile-decision-list\.secondary \.mobile-decision-card\.resolved p\s*\{[^}]*-webkit-line-clamp/s);
+  const serviceWorker = fs.readFileSync(path.join(__dirname, "../../public/service-worker.js"), "utf8");
+  assert.match(serviceWorker, /OPEN_ACTIONS = new Set\(\["more", "open"\]\)/);
+  assert.match(serviceWorker, /notificationBody\(payload, \[\]\)/);
+  assert.match(serviceWorker, /function isIosWorker\(\)/);
+  assert.match(serviceWorker, /Math\.min\(actions\.length, 2\)/);
+  const mobileApp = fs.readFileSync(path.join(__dirname, "../../public/mobile-app.js"), "utf8");
+  assert.match(mobileApp, /syncReplySendButton\(id, event\.target\.value\)/);
+  const desktopApp = fs.readFileSync(path.join(__dirname, "../../public/app.js"), "utf8");
+  assert.match(desktopApp, /syncMobileReplySendButton\(id, event\.target\.value\)/);
+
+  const handset = mobile.render({ decisions: [], integrations: { mobilePwa: {} } }, { busy: false }, { available: true }, { surface: "handset" });
+  assert.match(handset, /mobile-app-surface/);
+  assert.doesNotMatch(handset, /mobile-phone-device/);
+
+  const iosHandset = mobile.render(
+    { decisions: [], integrations: { mobilePwa: { paired: true, subscriptionCount: 0 } } },
+    { busy: false },
+    { available: false, ios: true, standalone: false, reason: "iPhone 需要先添加到主屏幕" },
+    { surface: "handset" },
+  );
+  assert.match(iosHandset, /系统通知/);
+  assert.match(iosHandset, /需从主屏幕打开/);
+  assert.match(iosHandset, /未订阅/);
+  assert.match(iosHandset, /添加到主屏幕/);
+
+  const pairing = mobile.render({ mobilePairingRequired: true });
+  assert.match(pairing, /需要配对/);
+  assert.doesNotMatch(pairing, /data-action="mobile-resolve-decision"/);
 });
 
-test("frontend settings view renders engines, Slack secrets, and network toggles", () => {
+test("frontend onboarding view renders real setup actions and mobile connection flow", () => {
+  const onboarding = onboardingViewUi.createOnboardingView({
+    PRODUCT_NAME: "Second",
+    PRODUCT_LOGO_SOURCES: traceCore.PRODUCT_LOGO_SOURCES,
+    ...presentation,
+    ...slackSettingsUi,
+  });
+  const state = {
+    daemon: { port: 7317 },
+    profile: { name: "Jason", agentName: "Jason 的分身" },
+    rules: [],
+    settings: { defaultEngine: "codex", codexNetworkAccess: false },
+    engines: [{ id: "codex", name: "Codex CLI", command: "codex", status: "ok" }],
+    integrations: {
+      publicAccess: {
+        enabled: true,
+        provider: "cloudflared",
+        activeUrl: "https://second.example.com",
+        status: "online",
+        providers: [
+          { id: "manual", label: "手动公网链接", description: "使用自有公网地址。" },
+          { id: "cloudflared", label: "Cloudflare Quick Tunnel", description: "启动 cloudflared。" },
+        ],
+        lastCheck: { ok: true, at: "2026-07-08T00:00:00.000Z", statusCode: 200 },
+      },
+      mobilePwa: { paired: false, subscriptionCount: 0, subscriptions: [] },
+      slack: {
+        socketMode: true,
+        botTokenConfigured: true,
+        botTokenLabel: "xoxb-...",
+        appTokenConfigured: false,
+      },
+    },
+  };
+  const form = () => ({
+    socketMode: true,
+    customizeProfileMessages: true,
+    botToken: "",
+    appToken: "",
+    decisionChannel: "C1",
+    allowedChannels: "C1",
+  });
+  const publicAccessForm = () => ({
+    provider: "cloudflared",
+    manualUrl: "https://second.example.com",
+  });
+  const pairingUrl = "https://second.example.com/mobile.html?pair=test";
+  const pairingQrSvg = qrCodeUi.toSvg(pairingUrl, { className: "mobile-qr-svg" });
+  const welcome = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 0 }, form);
+  const runtime = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 1 }, form);
+  const channel = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 2 }, form);
+  const mobileConnection = onboarding.render(
+    state,
+    { busy: false, mobileMockStatus: "idle", onboardingStep: 3, mobilePairingUrl: pairingUrl, mobilePairingQrSvg: pairingQrSvg },
+    form,
+    publicAccessForm,
+  );
+  const skipped = onboarding.render(
+    state,
+    { busy: false, mobileMockStatus: "idle", onboardingStep: 3, onboardingMobileSkipped: true },
+    form,
+    publicAccessForm,
+  );
+  const finish = onboarding.render(state, { busy: false, mobileMockStatus: "idle", onboardingStep: 6, onboardingMobileSkipped: true }, form, publicAccessForm);
+
+  assert.match(welcome, /把你的分身接进来/);
+  assert.match(runtime, /data-action="detect-engines"/);
+  assert.match(channel, /data-action="save-slack-config"/);
+  assert.match(channel, /data-slack-field="botToken"/);
+  assert.match(channel, /这些值从哪里获取/);
+  assert.match(channel, /https:\/\/api\.slack\.com\/apps/);
+  assert.match(channel, /Socket Mode \/ App Token/);
+  assert.match(channel, /aria-current="step"/);
+  assert.match(channel, /onboarding-current-label">当前/);
+  assert.match(mobileConnection, /连接手机决策端/);
+  assert.match(mobileConnection, /外网访问方式/);
+  assert.match(mobileConnection, /data-public-access-field="provider"/);
+  assert.doesNotMatch(mobileConnection, /data-public-access-field="manualUrl"/);
+  assert.match(mobileConnection, /data-action="public-access-start"/);
+  assert.match(mobileConnection, /data-action="public-access-check"/);
+  assert.match(mobileConnection, /data-action="mobile-refresh-pairing"/);
+  assert.match(mobileConnection, /data-action="mobile-copy-pairing-link"/);
+  assert.match(mobileConnection, /data-action="onboarding-skip-mobile"/);
+  assert.match(mobileConnection, /mobile-qr-svg/);
+  assert.match(mobileConnection, /需要配对手机,或先跳过手机连接/);
+  assert.match(skipped, /已跳过手机连接/);
+  assert.match(finish, /通知 <b>已跳过<\/b>/);
+  assert.match(finish, /data-action="slack-simulate-task"/);
+  const css = fs.readFileSync(path.join(__dirname, "../../public/styles.css"), "utf8");
+  assert.match(css, /\.setup-mobile-grid\s*\{/);
+  assert.match(css, /\.setup-mobile-actions\s*\{/);
+  assert.match(css, /\.setup-mobile-action-links\s*\{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/s);
+  assert.match(css, /\.setup-public-form\.single\s*\{/);
+});
+
+test("frontend settings view renders engines, channel details, and network toggles", () => {
   const settings = settingsViewUi.createSettingsView({
     PRODUCT_NAME: "Second",
     PRODUCT_LOGO_SOURCES: traceCore.PRODUCT_LOGO_SOURCES,
     ...presentation,
     ...slackSettingsUi,
   });
-  const html = settings.render(
-    {
-      daemon: { port: 7317 },
-      settings: { codexNetworkAccess: true, lastScan: "2026-07-07T00:00:00.000Z" },
-      engines: [{ id: "codex", name: "Codex", status: "ok", version: "1.0.0", isDefault: true }],
-      channels: [{ id: "slack", name: "Slack", status: "connected", notify: true, meta: "Socket Mode · 允许频道 2" }],
-      integrations: { slack: { socketMode: true, botTokenConfigured: true, botTokenLabel: "xoxb-..." } },
-      metrics: { pendingDecisions: 1 },
+  const state = {
+    daemon: { port: 7317 },
+    settings: { codexNetworkAccess: true, lastScan: "2026-07-07T00:00:00.000Z" },
+    engines: [{ id: "codex", name: "Codex", status: "ok", version: "1.0.0", isDefault: true }],
+    channels: [
+      { id: "assistant", name: "对话助手", status: "connected", notify: true, meta: "本地浮动消息助手 · 右下角常驻" },
+      { id: "slack", name: "Slack", status: "connected", notify: true, meta: "Socket Mode · 允许频道 2" },
+      { id: "linear", name: "Linear", status: "not_configured", notify: false, meta: "连接后支持 issue 同步" },
+    ],
+    integrations: {
+      publicAccess: {
+        enabled: true,
+        provider: "manual",
+        providerLabel: "手动公网链接",
+        manualUrl: "https://second.example.com",
+        activeUrl: "https://second.example.com",
+        status: "online",
+        providers: [
+          { id: "manual", label: "手动公网链接", description: "使用自有公网地址。" },
+          { id: "cloudflared", label: "Cloudflare Quick Tunnel", description: "启动 cloudflared。" },
+        ],
+        lastCheck: { ok: true, at: "2026-07-08T00:00:00.000Z", statusCode: 200 },
+      },
+      slack: { socketMode: true, botTokenConfigured: true, botTokenLabel: "xoxb-..." },
     },
+    metrics: { pendingDecisions: 1 },
+  };
+  const slackForm = () => ({
+    socketMode: true,
+    customizeProfileMessages: true,
+    publicUrl: "",
+    decisionChannel: "C1",
+    allowedUsers: "",
+    allowedChannels: "",
+    botToken: "",
+    appToken: "",
+    signingSecret: "",
+  });
+  const html = settings.render(
+    state,
     { busy: false, slackManifest: "" },
+    slackForm,
     () => ({
-      socketMode: true,
-      customizeProfileMessages: true,
-      publicUrl: "",
-      decisionChannel: "C1",
-      allowedUsers: "",
-      allowedChannels: "",
-      botToken: "",
-      appToken: "",
-      signingSecret: "",
+      provider: "manual",
+      manualUrl: "https://second.example.com",
     }),
   );
 
   assert.match(html, /Agent 执行环境/);
+  assert.match(html, /手机公网通道/);
+  assert.match(html, /logo-assistant/);
+  assert.match(html, /settings-icon-proxy/);
+  assert.doesNotMatch(html, /settings-logo-fallback[^>]*>\s*A\s*</);
+  assert.match(html, /data-public-access-field="provider"/);
+  assert.match(html, /data-public-access-field="manualUrl"/);
+  assert.match(html, /data-action="public-access-save"/);
+  assert.match(html, /data-action="public-access-start"/);
+  assert.match(html, /data-action="public-access-check"/);
+  assert.match(html, /data-action="public-access-copy-url"/);
+  assert.match(html, /data-action="public-access-stop"/);
+  assert.match(html, /https:\/\/second\.example\.com/);
   assert.match(html, /data-action="codex-network-toggle"/);
-  assert.match(html, /Bot User OAuth Token/);
-  assert.match(html, /Socket Mode/);
+  assert.match(html, /本地智能体网络访问/);
+  assert.doesNotMatch(html, /Codex CLI 网络访问/);
+  assert.doesNotMatch(html, /检测方式/);
+  assert.match(html, /data-action="channel-config" data-id="slack"/);
+  assert.match(html, /data-action="channel-config" data-id="assistant"/);
+  assert.match(html, /data-action="channel-config" data-id="linear"/);
+  assert.match(html, /channel-processing-toggle/);
+  assert.doesNotMatch(html, /data-action="channel-status"/);
+  assert.doesNotMatch(html, />断开</);
+  assert.match(html, /配置/);
+  assert.doesNotMatch(html, /Bot User OAuth Token/);
+
+  const cloudflareHtml = settings.render(
+    state,
+    { busy: false, slackManifest: "" },
+    slackForm,
+    () => ({
+      provider: "cloudflared",
+      manualUrl: "https://second.example.com",
+    }),
+  );
+  assert.match(cloudflareHtml, /Cloudflare Quick Tunnel/);
+  assert.doesNotMatch(cloudflareHtml, /data-public-access-field="manualUrl"/);
+
+  const modalHtml = settings.render(
+    state,
+    { busy: false, slackManifest: "", settingsChannelConfig: "slack" },
+    slackForm,
+    () => ({
+      provider: "manual",
+      manualUrl: "https://second.example.com",
+    }),
+  );
+  assert.match(modalHtml, /settings-channel-modal/);
+  assert.match(modalHtml, /data-action="close-settings-channel-config"/);
+  assert.match(modalHtml, /Bot User OAuth Token/);
+  assert.match(modalHtml, /Socket Mode/);
+
+  const css = fs.readFileSync(path.join(__dirname, "../../public/styles.css"), "utf8");
+  assert.match(css, /\.public-access-grid\s*\{/);
+  assert.match(css, /\.public-access-grid\.single\s*\{/);
+  assert.match(css, /\.settings-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/s);
+  assert.match(css, /\.field input,\s*\.field textarea,\s*\.field select\s*\{/);
 });
 
 test("frontend task trace format sanitizes secrets and runtime noise", () => {
@@ -447,6 +853,75 @@ test("frontend task trace view renders source events and agent bundles", () => {
   assert.match(html, /帮我看下 OpenRouter 额度/);
   assert.match(html, /测试分身执行流/);
   assert.match(taskTrace.displayEventLogText({ type: "codex.session", taskId: "T-trace" }), /codex\.session\.ready/);
+});
+
+test("frontend task trace view renders assistant source and follow-up messages as cards", () => {
+  const traceFormat = taskTraceFormatUi.createTaskTraceFormat({ PRODUCT_NAME: "Second" });
+  const sourceView = taskTraceSourceViewUi.createTaskTraceSourceView({
+    TraceCore: traceCore,
+    DEFAULT_SOURCE_CHANNEL: traceCore.DEFAULT_SOURCE_CHANNEL,
+    ...presentation,
+  });
+  let taskTrace = null;
+  const agentView = taskTraceAgentViewUi.createTaskTraceAgentView({
+    TraceCore: traceCore,
+    ...presentation,
+    displayTraceEvent: (event, task) => taskTrace.displayTraceEvent(event, task),
+    getUi: () => ({ execOpen: {} }),
+    traceFormat,
+  });
+  taskTrace = taskTraceViewUi.createTaskTraceView({
+    PRODUCT_NAME: "Second",
+    TraceCore: traceCore,
+    DEFAULT_SOURCE_CHANNEL: traceCore.DEFAULT_SOURCE_CHANNEL,
+    ...presentation,
+    agentView,
+    sourceView,
+    traceFormat,
+  });
+  const html = taskTrace.render(
+    {
+      events: [],
+      tasks: [
+        {
+          id: "T-assistant-trace",
+          title: "看本机状态",
+          source: "对话助手",
+          agent: "Jason的分身",
+          status: "running",
+          channel: {
+            id: "assistant",
+            name: "对话助手",
+            external: {
+              channel: "assistant",
+              threadTs: "local-assistant",
+              conversationId: "local-assistant",
+              user: "Jason",
+              eventTs: "2026-07-08T04:07:43.000Z",
+            },
+          },
+          messageText: "看下本机的状态",
+          trace: [
+            { kind: "entry", actor: "对话助手", time: "刚刚", title: "会话新消息", description: "本机存储利用情况", meta: "conversation · assistant:local-assistant" },
+          ],
+          agentEvents: [],
+        },
+      ],
+    },
+    { selectedTask: "T-assistant-trace", execOpen: {} },
+  );
+
+  assert.equal(traceCore.sourceChannelAdapter("assistant").label, "对话助手");
+  assert.match(html, /source-event-badge/);
+  assert.match(html, /source-icon-assistant/);
+  assert.match(html, /source-assistant-robot/);
+  assert.match(html, /对话助手/);
+  assert.match(html, /输入消息/);
+  assert.match(html, /继续输入/);
+  assert.match(html, /看下本机的状态/);
+  assert.match(html, /本机存储利用情况/);
+  assert.match(html, /conversation local-assistant/);
+  assert.doesNotMatch(html, />信息源</);
 });
 
 test("frontend runtime view renders launcher, running rows, and event logs", () => {
@@ -545,24 +1020,36 @@ test("frontend action handler mutates UI state through injected dependencies", a
     execOpen: {},
     sessionOpen: {},
     replyDrafts: {},
+    mobileExpanded: {},
+    mobileReplyDrafts: {},
+    mobileReplyOpen: {},
     taskPrompt: "say hello",
     taskWorkspace: "",
   };
   const calls = [];
+  const copied = [];
   let renders = 0;
   let refreshes = 0;
+  const previousNavigator = globalThis.navigator;
+  globalThis.navigator = { clipboard: { writeText: async (text) => copied.push(text) } };
   const handler = actions.createActionHandler({
+    MobilePwa: {
+      subscribe: async (request) => request("/api/mobile/push/subscribe", { method: "POST", body: { subscription: { endpoint: "https://push.example/sub" } } }),
+      unsubscribe: async (request) => request("/api/mobile/push/unsubscribe", { method: "POST", body: { endpoint: "https://push.example/sub" } }),
+    },
     PRODUCT_NAME: "Second",
+    QrCode: qrCodeUi,
     UiStore: uiStore,
     api: async (url, options = {}) => {
       calls.push({ url, options });
+      if (url === "/api/mobile/pairing") return { url: "https://second.example.com/mobile.html?pair=test" };
       return {};
     },
     app: { querySelector: () => null },
     cssEscape: (value) => value,
     currentProfileForm: () => ({}),
     currentSlackForm: () => ({}),
-    getState: () => ({ decisions: [], integrations: { slack: {} } }),
+    getState: () => ({ decisions: [{ id: "D-1", selectedOption: "a" }], integrations: { slack: {} } }),
     profileFormFromState: () => ({ name: "Tester" }),
     randomProfileSeed: () => "seed",
     refresh: async () => {
@@ -583,12 +1070,52 @@ test("frontend action handler mutates UI state through injected dependencies", a
 
   await handler({ action: "nav", view: "tasks" });
   assert.equal(ui.view, "tasks");
+  await handler({ action: "channel-config", id: "slack" });
+  assert.equal(ui.settingsChannelConfig, "slack");
+  await handler({ action: "close-settings-channel-config" });
+  assert.equal(ui.settingsChannelConfig, null);
+  await handler({ action: "channel-config", id: "assistant" });
+  assert.equal(calls.some((call) => call.toast === "对话助手无需额外配置，可用开关控制是否处理本地对话"), true);
+  await handler({ action: "channel-toggle", id: "assistant", notify: "false" });
+  assert.equal(calls.some((call) => call.url === "/api/channels/assistant" && call.options.body.notify === false), true);
+  await handler({ action: "noop" });
+  ui.onboardingStep = 3;
+  await handler({ action: "onboarding-skip-mobile" });
+  assert.equal(ui.onboardingMobileSkipped, true);
+  assert.equal(ui.onboardingStep, 4);
   await handler({ action: "toggle-exec", key: "bundle-1" });
   assert.equal(ui.execOpen["bundle-1"], true);
+  await handler({ action: "mobile-mock-connect" });
+  assert.equal(ui.mobileMockStatus, "connected");
+  await handler({ action: "mobile-push-subscribe" });
+  assert.equal(calls.some((call) => call.url === "/api/mobile/push/subscribe"), true);
+  await handler({ action: "mobile-delete-subscription", id: "sub-1" });
+  assert.equal(calls.some((call) => call.url === "/api/mobile/push/subscriptions/sub-1" && call.options.method === "DELETE"), true);
+  await handler({ action: "mobile-copy-pairing-link" });
+  assert.equal(copied.includes("https://second.example.com/mobile.html?pair=test"), true);
+  assert.equal(ui.mobilePairingUrl, "https://second.example.com/mobile.html?pair=test");
+  assert.match(ui.mobilePairingQrSvg, /mobile-qr-svg/);
+  await handler({ action: "mobile-refresh-pairing" });
+  assert.match(ui.mobilePairingQrSvg, /Second mobile pairing/);
+  await handler({ action: "mobile-toggle-decision", id: "D-1" });
+  assert.equal(ui.mobileExpanded["D-1"], true);
+  await handler({ action: "mobile-toggle-reply", id: "D-1" });
+  assert.equal(ui.mobileReplyOpen["D-1"], true);
+  ui.mobileReplyDrafts["D-1"] = "请补充更多证据";
+  await handler({ action: "mobile-send-decision-reply", id: "D-1" });
+  assert.equal(calls.some((call) => call.url === "/api/decisions/D-1/reply" && call.options.body.message === "请补充更多证据"), true);
+  assert.equal(ui.mobileReplyOpen["D-1"], false);
+  await handler({ action: "mobile-resolve-decision", id: "D-1", verdict: "approved" });
+  assert.equal(calls.some((call) => call.url === "/api/decisions/D-1/resolve"), true);
+  ui.assistantDraft = "本地对话";
+  await handler({ action: "assistant-send" });
+  assert.equal(calls.some((call) => call.url === "/assistant/messages"), true);
+  assert.equal(ui.assistantDraft, "");
+  assert.equal(ui.assistantOpen, true);
   await handler({ action: "create-task" });
   assert.equal(calls.some((call) => call.url === "/api/tasks"), true);
   assert.equal(ui.view, "runtime");
-  assert.equal(refreshes, 1);
+  assert.equal(refreshes, 7);
   assert.ok(renders >= 3);
+  globalThis.navigator = previousNavigator;
 });
-

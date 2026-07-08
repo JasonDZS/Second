@@ -168,12 +168,20 @@ function normalizeState(state) {
     settings: { ...seeded.settings, ...(state.settings || {}) },
     engines: state.engines || seeded.engines,
     channels: mergeById(seeded.channels, state.channels),
+    assistant: normalizeAssistantState({ ...seeded.assistant, ...(state.assistant || {}) }),
     decisions: state.decisions || seeded.decisions,
     tasks: state.tasks || seeded.tasks,
     rules: state.rules || seeded.rules,
     preferences: state.preferences || seeded.preferences,
     candidates: state.candidates || seeded.candidates,
     events: state.events || seeded.events,
+  };
+}
+
+function normalizeAssistantState(assistant = {}) {
+  return {
+    activeConversationId: assistant.activeConversationId || "local-assistant",
+    messages: Array.isArray(assistant.messages) ? assistant.messages : [],
   };
 }
 

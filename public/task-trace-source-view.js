@@ -20,7 +20,8 @@
 
     function sourceMessageTimelineItem(task, ev, index, total, live = false) {
       const source = ev.source || channelMessageSource(task, ev);
-      const actor = actorStyle(sourceChannelAdapter(source.type).actorKind);
+      const adapter = sourceChannelAdapter(source.type);
+      const actor = actorStyle(adapter.actorKind);
       return `
         <div class="timeline-item source-message-node ${live ? "live" : ""}">
           <div class="timeline-rail">
@@ -33,7 +34,7 @@
                 ${sourceIcon(source.type, "source-event-badge-icon")}
                 <span>${escapeHtml(source.label || source.channelLabel || "信息源")}</span>
               </span>
-              <span class="source-kind">信息源</span>
+              <span class="source-kind">${escapeHtml(source.kindLabel || adapter.kindLabel || "信息源")}</span>
               <span class="time-small mono" style="margin-left:0">${escapeHtml(source.time || ev.time || "刚刚")}</span>
             </div>
             ${sourceMessageCard(source)}
@@ -63,7 +64,7 @@
                     </div>
                     <div class="task-source-text">${escapeHtml(source.text)}</div>
                     <div class="task-source-meta mono">
-                      ${[source.channelId, source.threadTs ? `thread ${source.threadTs}` : "", source.taskId].filter(Boolean).map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
+                      ${sourceMetaParts(source, adapter).map((part) => `<span>${escapeHtml(part)}</span>`).join("")}
                     </div>
                   </div>
                 </div>
@@ -102,6 +103,7 @@
         channelLabel: adapter.channelLabel(external, task),
         time: adapter.eventTime(external, { relativeTime, task }),
         subtitle: adapter.originalSubtitle,
+        kindLabel: adapter.kindLabel,
       };
     }
 
@@ -125,6 +127,7 @@
         text: ev.description || "",
         time: ev.time || "刚刚",
         subtitle: sourceChannelAdapter(base.type).threadSubtitle,
+        kindLabel: sourceChannelAdapter(base.type).threadKindLabel || sourceChannelAdapter(base.type).kindLabel,
         taskId: task.id,
       };
     }
@@ -139,6 +142,9 @@
 
     function sourceIcon(type, extraClass = "") {
       const adapter = sourceChannelAdapter(type);
+      if (adapter.id === "assistant") {
+        return assistantSourceIcon(adapter, extraClass);
+      }
       if (adapter.icon) {
         return `
           <span class="source-icon ${escapeAttr(adapter.iconClass || "")} ${escapeAttr(extraClass)}" aria-hidden="true">
@@ -147,6 +153,40 @@
         `;
       }
       return `<span class="source-icon ${escapeAttr(extraClass)}" aria-hidden="true">${escapeHtml(String(adapter.label || "S").slice(0, 1))}</span>`;
+    }
+
+    function assistantSourceIcon(adapter, extraClass = "") {
+      return `
+        <span class="source-icon ${escapeAttr(adapter.iconClass || "")} ${escapeAttr(extraClass)}" aria-hidden="true">
+          <span class="assistant-robot source-assistant-robot">
+            <svg viewBox="0 0 64 64" fill="none" focusable="false">
+              <path class="assistant-robot-halo" d="M21 13c3-5 19-5 22 0" />
+              <rect class="assistant-robot-shell" x="10" y="15" width="44" height="39" rx="16" />
+              <path class="assistant-robot-side left" d="M10 30H6c-2 0-3 1.6-3 3.5S4 37 6 37h4" />
+              <path class="assistant-robot-side right" d="M54 30h4c2 0 3 1.6 3 3.5S60 37 58 37h-4" />
+              <rect class="assistant-robot-visor" x="18" y="25" width="28" height="16" rx="9" />
+              <circle class="assistant-robot-eye" cx="27" cy="33" r="2.6" />
+              <circle class="assistant-robot-eye" cx="37" cy="33" r="2.6" />
+              <path class="assistant-robot-smile" d="M27 43c3.1 2.7 7.1 2.7 10.2 0" />
+              <circle class="assistant-robot-status" cx="44" cy="20" r="3" />
+            </svg>
+          </span>
+        </span>
+      `;
+    }
+
+    function sourceMetaParts(source = {}, adapter = {}) {
+      if (adapter.id === "assistant") {
+        return [
+          source.threadTs ? `conversation ${source.threadTs}` : "",
+          source.taskId,
+        ].filter(Boolean);
+      }
+      return [
+        source.channelId,
+        source.threadTs ? `thread ${source.threadTs}` : "",
+        source.taskId,
+      ].filter(Boolean);
     }
 
     function isSourceMessageEvent(ev = {}) {

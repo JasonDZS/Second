@@ -35,6 +35,21 @@
       eventTime: (external = {}, helpers = {}) => slackEventTime(external.eventTs || external.event_ts, helpers.relativeTime),
       isThreadTrace: (ev = {}) => ev.kind === "entry" && /线程新消息|线程消息/.test(String(ev.title || "")),
     },
+    assistant: {
+      id: "assistant",
+      label: "对话助手",
+      icon: "",
+      iconClass: "source-icon-assistant",
+      actorKind: "entry",
+      kindLabel: "输入消息",
+      threadKindLabel: "继续输入",
+      originalSubtitle: "对话助手 · 原始输入",
+      threadSubtitle: "对话助手 · 继续输入",
+      channelLabel: () => "本地对话",
+      authorLabel: (external = {}) => external.user || "你",
+      eventTime: (external = {}, helpers = {}) => assistantEventTime(external.eventTs || external.event_ts, helpers.relativeTime),
+      isThreadTrace: (ev = {}) => ev.kind === "entry" && /会话新消息|线程新消息|线程消息/.test(String(ev.title || "")),
+    },
   };
 
   const DEFAULT_SOURCE_CHANNEL = {
@@ -48,7 +63,7 @@
     channelLabel: (_external = {}, task = {}) => task.source || task.sourceMessage?.channelName || "任务来源",
     authorLabel: (_external = {}, task = {}) => task.source || "来源",
     eventTime: (external = {}, helpers = {}) => (external.eventTs && helpers.relativeTime ? helpers.relativeTime(external.eventTs) : ""),
-    isThreadTrace: (ev = {}) => ev.kind === "entry" && /线程新消息|线程消息/.test(String(ev.title || "")),
+    isThreadTrace: (ev = {}) => ev.kind === "entry" && /会话新消息|线程新消息|线程消息/.test(String(ev.title || "")),
   };
 
   const AGENT_RUNTIME_DEFAULT = {
@@ -517,6 +532,11 @@
     if (!value) return "Slack requester";
     if (value === "requester") return "Slack requester";
     return `Slack ${value}`;
+  }
+
+  function assistantEventTime(value, relativeTime) {
+    if (!value) return "";
+    return typeof relativeTime === "function" ? relativeTime(value) : String(value);
   }
 
   function slackEventTime(ts, relativeTime) {

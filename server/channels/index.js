@@ -1,10 +1,12 @@
 "use strict";
 
+const assistant = require("./assistant");
 const slack = require("./slack");
 const { placeholderAdapters } = require("./placeholders");
 
 const adapters = new Map(
   [
+    assistant,
     slack,
     ...placeholderAdapters,
   ].map((adapter) => [adapter.id, adapter]),

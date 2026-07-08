@@ -21,7 +21,7 @@
       relativeTime = () => "刚刚",
     } = deps;
 
-    function render(state = {}, ui = {}, currentSlackForm = () => ({})) {
+    function render(state = {}, ui = {}, currentSlackForm = () => ({}), currentPublicAccessForm = () => ({})) {
       const snippet = `"mcpServers": {
   "second-decision": {
     "command": "second",
@@ -65,16 +65,119 @@
                   </div>
                   ${(state.channels || []).map(channelRow).join("")}
                 </div>
-              </div>
-
-              <div class="settings-secondary">
-                ${slackSetupCard(state, ui, currentSlackForm)}
+                ${publicAccessCard(state, ui, currentPublicAccessForm)}
                 ${decisionMcpCard(state, snippet)}
-                ${runtimeProbeCard(state)}
-                ${codexNetworkAccessCard(state)}
+                ${agentNetworkAccessCard(state)}
               </div>
             </div>
+            ${settingsChannelModal(state, ui, currentSlackForm)}
           </div>
+        </div>
+      `;
+    }
+
+    function publicAccessCard(state, ui, currentPublicAccessForm) {
+      const access = state.integrations?.publicAccess || {};
+      const form = currentPublicAccessForm();
+      const providers = Array.isArray(access.providers) && access.providers.length
+        ? access.providers
+        : [
+            { id: "manual", label: "手动公网链接", description: "使用你自己配置好的 HTTPS 地址。" },
+            { id: "cloudflared", label: "Cloudflare Quick Tunnel", description: "由 Second 启动 cloudflared 快速隧道。" },
+          ];
+      const provider = form.provider || access.provider || "manual";
+      const activeUrl = access.activeUrl || "";
+      const check = access.lastCheck || null;
+      const checkLine = check
+        ? check.ok
+          ? `成功 · ${check.statusCode || 200} · ${relativeTime(check.at)}`
+          : `失败 · ${check.error || "无法访问"}`
+        : "尚未检测";
+      const status = publicAccessStatus(access);
+      const manualProvider = provider === "manual";
+      return `
+        <div class="settings-card public-access-card">
+          <div class="settings-head">
+            ${productLogo({ id: "public-access", name: "手机公网通道" }, "settings-logo-flat")}
+            <div style="flex:1">
+              <div class="settings-name">手机公网通道</div>
+              <div class="settings-meta">手机决策端需要一个手机可访问的 HTTPS 地址。这里统一管理 Cloudflared、手动公网链接以及后续 ngrok / frp provider。</div>
+            </div>
+            <span class="pill ${status.cls}">${status.label}</span>
+          </div>
+          <div class="settings-card-body public-access-body">
+            <div class="public-access-grid ${manualProvider ? "" : "single"}">
+              <label class="field">
+                <span>通道方式</span>
+                <select data-public-access-field="provider">
+                  ${providers.map((item) => `<option value="${escapeAttr(item.id)}" ${item.id === provider ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+                </select>
+              </label>
+              ${manualProvider ? `
+                <label class="field">
+                  <span>手动公网链接</span>
+                  <input data-public-access-field="manualUrl" value="${escapeAttr(form.manualUrl || "")}" placeholder="https://your-domain.example.com" />
+                </label>
+              ` : ""}
+            </div>
+            <div class="public-access-provider-note">
+              ${providers.map((item) => `<span class="${item.id === provider ? "active" : ""}">${escapeHtml(item.label)}: ${escapeHtml(item.description || "")}</span>`).join("")}
+            </div>
+            <div class="public-access-status-grid">
+              <div>
+                <b>当前访问地址</b>
+                <span class="mono">${activeUrl ? escapeHtml(activeUrl) : "未打开"}</span>
+              </div>
+              <div>
+                <b>公网检测</b>
+                <span>${escapeHtml(checkLine)}</span>
+              </div>
+            </div>
+            ${access.lastError ? `<div class="public-access-error">${escapeHtml(access.lastError)}</div>` : ""}
+            <div class="public-access-actions">
+              <button class="btn" data-action="public-access-save">保存设置</button>
+              <button class="btn btn-primary" data-action="public-access-start" ${ui.busy === "public-access-start" ? "disabled" : ""}>${access.enabled ? "重新打开" : "打开通道"}</button>
+              <button class="btn" data-action="public-access-check" ${ui.busy === "public-access-check" ? "disabled" : ""}>检测公网访问</button>
+              <button class="btn" data-action="public-access-copy-url" ${activeUrl ? "" : "disabled"}>复制链接</button>
+              <button class="btn" data-action="public-access-stop" ${ui.busy === "public-access-stop" || !access.enabled ? "disabled" : ""}>关闭</button>
+            </div>
+            <div class="settings-meta">打开后，“消息端”的二维码会使用这里的访问地址。关闭后手机仍可保留订阅，但新的手机配对不再使用公网通道。</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function publicAccessStatus(access = {}) {
+      if (!access.enabled) return { label: "未打开", cls: "kind-amber" };
+      if (access.status === "online") return { label: "公网可访问", cls: "risk-low" };
+      if (access.status === "starting") return { label: "启动中", cls: "kind-amber" };
+      if (access.status === "error") return { label: "检测失败", cls: "risk-high" };
+      if (access.activeUrl) return { label: "已配置", cls: "risk-low" };
+      return { label: "待检测", cls: "kind-amber" };
+    }
+
+    function settingsChannelModal(state, ui, currentSlackForm) {
+      if (ui.settingsChannelConfig !== "slack") return "";
+      const slack = state.integrations?.slack || {};
+      const socketStatus = latestSlackStatus(slack);
+      return `
+        <div class="profile-modal-backdrop settings-channel-backdrop" role="presentation" data-action="close-settings-channel-config">
+          <section class="profile-modal settings-channel-modal" role="dialog" aria-modal="true" aria-labelledby="settings-channel-title">
+            <div class="profile-modal-head">
+              ${productLogo({ id: "slack", name: "Slack", mono: "S" }, "settings-logo-flat")}
+              <div style="flex:1">
+                <h2 id="settings-channel-title">Slack 集成</h2>
+                <div class="settings-meta">配置 token、Socket Mode、manifest 和测试消息。已有 token 不会在前端回显。</div>
+              </div>
+              <span class="pill ${socketStatus.cls}">${escapeHtml(socketStatus.label)}</span>
+              <button class="icon-btn" data-action="close-settings-channel-config" aria-label="关闭">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div class="profile-modal-body settings-channel-modal-body">
+              ${slackSetupBody(state, ui, currentSlackForm)}
+            </div>
+          </section>
         </div>
       `;
     }
@@ -104,40 +207,19 @@
       `;
     }
 
-    function runtimeProbeCard(state) {
-      const networkEnabled = Boolean(state.settings?.codexNetworkAccess);
-      return `
-        <div class="settings-card compact-card">
-          <div class="settings-head">
-            <div>
-              <div class="settings-name">检测方式</div>
-              <div class="settings-meta">探针结果决定新任务是否可直接运行。</div>
-            </div>
-          </div>
-          <div class="settings-card-body">
-            <div class="probe-steps">
-              <div><span class="detail-id mono">01</span><b>扫描 PATH</b><em>查找 <span class="mono">codex</span> 可执行文件</em></div>
-              <div><span class="detail-id mono">02</span><b>读取版本</b><em>执行 <span class="mono">codex --version</span></em></div>
-              <div><span class="detail-id mono">03</span><b>派发任务</b><em>使用 <span class="mono">codex exec --json --sandbox workspace-write${networkEnabled ? " -c sandbox_workspace_write.network_access=true" : ""}</span></em></div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    function codexNetworkAccessCard(state) {
+    function agentNetworkAccessCard(state) {
       const enabled = Boolean(state.settings?.codexNetworkAccess);
       return `
         <div class="settings-card compact-card">
           <div class="settings-head">
             <div style="flex:1">
-              <div class="settings-name">Codex CLI 网络访问</div>
-              <div class="settings-meta">开启后,新任务和恢复中的任务会带上 <span class="mono">sandbox_workspace_write.network_access=true</span>。</div>
+              <div class="settings-name">本地智能体网络访问</div>
+              <div class="settings-meta">开启后,新任务和恢复任务会允许本地执行引擎访问网络; Codex CLI 会映射到 <span class="mono">workspace-write</span> 网络开关。</div>
             </div>
             <button
               class="toggle ${enabled ? "on" : ""}"
               type="button"
-              aria-label="${enabled ? "关闭 Codex CLI 网络访问" : "开启 Codex CLI 网络访问"}"
+              aria-label="${enabled ? "关闭本地智能体网络访问" : "开启本地智能体网络访问"}"
               data-action="codex-network-toggle"
               data-enabled="${enabled ? "false" : "true"}"
             ></button>
@@ -152,22 +234,12 @@
       `;
     }
 
-    function slackSetupCard(state, ui, currentSlackForm) {
+    function slackSetupBody(state, ui, currentSlackForm) {
       const form = currentSlackForm();
       const slack = state.integrations?.slack || {};
-      const socketStatus = latestSlackStatus(slack);
       const manifestText = ui.slackManifest || "";
       return `
-        <div class="settings-card slack-setup-card">
-          <div class="settings-head">
-            ${productLogo({ id: "slack", name: "Slack", mono: "S" }, "settings-logo-flat")}
-            <div style="flex:1">
-              <div class="settings-name">Slack 集成</div>
-              <div class="settings-meta">在前端保存 token、生成 manifest、重连 Socket Mode、发测试消息。manifest 会包含频道名称解析所需 read scope。</div>
-            </div>
-            <span class="pill ${socketStatus.cls}">${escapeHtml(socketStatus.label)}</span>
-          </div>
-          <div class="slack-setup-body">
+        <div class="slack-setup-body">
             <div class="slack-mode-row">
               <label class="slack-check">
                 <input type="checkbox" data-slack-field="socketMode" ${form.socketMode ? "checked" : ""} />
@@ -220,7 +292,6 @@
                 <div class="code-block mono">${escapeHtml(manifestText)}</div>
               </div>
             ` : ""}
-          </div>
         </div>
       `;
     }
@@ -239,6 +310,8 @@
       const id = item?.id || "";
       const src = PRODUCT_LOGO_SOURCES[id];
       const classes = ["settings-logo", `logo-${id}`, extraClass].filter(Boolean).join(" ");
+      if (id === "assistant") return assistantSettingsLogo(classes);
+      if (id === "public-access") return proxyNetworkLogo(classes);
       if (src) {
         return `
           <div class="${classes}" aria-hidden="true">
@@ -250,6 +323,41 @@
       return `
         <div class="${classes} settings-logo-fallback" aria-hidden="true" style="background:${color.bg};color:${color.color}">
           ${escapeHtml(item?.mono || item?.name?.[0] || "?")}
+        </div>
+      `;
+    }
+
+    function assistantSettingsLogo(classes) {
+      return `
+        <div class="${classes}" aria-hidden="true">
+          <span class="assistant-robot settings-assistant-robot">
+            <svg viewBox="0 0 64 64" fill="none" focusable="false">
+              <path class="assistant-robot-halo" d="M21 13c3-5 19-5 22 0" />
+              <rect class="assistant-robot-shell" x="10" y="15" width="44" height="39" rx="16" />
+              <path class="assistant-robot-side left" d="M10 30H6c-2 0-3 1.6-3 3.5S4 37 6 37h4" />
+              <path class="assistant-robot-side right" d="M54 30h4c2 0 3 1.6 3 3.5S60 37 58 37h-4" />
+              <rect class="assistant-robot-visor" x="18" y="25" width="28" height="16" rx="9" />
+              <circle class="assistant-robot-eye" cx="27" cy="33" r="2.6" />
+              <circle class="assistant-robot-eye" cx="37" cy="33" r="2.6" />
+              <path class="assistant-robot-smile" d="M27 43c3.1 2.7 7.1 2.7 10.2 0" />
+              <circle class="assistant-robot-status" cx="44" cy="20" r="3" />
+            </svg>
+          </span>
+        </div>
+      `;
+    }
+
+    function proxyNetworkLogo(classes) {
+      return `
+        <div class="${classes} settings-icon-proxy" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" focusable="false">
+            <path d="M4 12h4.5m7 0H20" />
+            <path d="M8.5 12a3.5 3.5 0 0 1 7 0" />
+            <path d="M8.5 12a3.5 3.5 0 0 0 7 0" />
+            <circle cx="4" cy="12" r="2" />
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="20" cy="12" r="2" />
+          </svg>
         </div>
       `;
     }
@@ -285,23 +393,31 @@
 
     function channelRow(channel) {
       const connected = channel.status === "connected";
+      const processingEnabled = connected && channel.notify !== false;
+      const toggleDisabled = connected ? "" : "disabled";
       return `
         <div class="settings-row channel-row">
           ${productLogo(channel, "settings-logo-flat")}
           <div class="settings-main">
             <div class="settings-title-line">
               <span class="settings-name">${escapeHtml(channel.name)}</span>
-              <span class="pill ${connected ? "risk-low" : "kind-amber"}">${connected ? (channel.notify ? "已连接" : "已连接 · 推送暂停") : "未连接"}</span>
+              <span class="pill ${connected ? "risk-low" : "kind-amber"}">${connected ? "已连接" : "未连接"}</span>
             </div>
             <div class="settings-meta channel-meta">${channelMetaParts(channel.meta).map((part) => `<span>${escapeHtml(part)}</span>`).join("")}</div>
           </div>
-          ${connected ? `
-            <div class="channel-controls">
-              <span style="font-size:11.5px;color:#6E6858">接收任务与决策推送</span>
-              <button class="toggle ${channel.notify ? "on" : ""}" aria-label="toggle ${escapeAttr(channel.name)}" data-action="channel-toggle" data-id="${escapeAttr(channel.id)}" data-notify="${channel.notify ? "false" : "true"}"></button>
-              <button class="btn" style="font-size:11.5px;padding:7px 13px;border-radius:7px" data-action="channel-status" data-id="${escapeAttr(channel.id)}" data-status="disconnected">断开</button>
-            </div>
-          ` : `<div class="channel-controls single"><button class="btn btn-primary" style="font-size:11.5px;padding:7px 14px;border-radius:7px" data-action="channel-status" data-id="${escapeAttr(channel.id)}" data-status="connected">连接</button></div>`}
+          <div class="channel-controls">
+            <span class="channel-processing-label">${processingEnabled ? "处理中" : "已停用"}</span>
+            <button
+              class="toggle channel-processing-toggle ${processingEnabled ? "on" : ""}"
+              type="button"
+              aria-label="${processingEnabled ? `停用 ${escapeAttr(channel.name)} 消息处理` : `启用 ${escapeAttr(channel.name)} 消息处理`}"
+              data-action="channel-toggle"
+              data-id="${escapeAttr(channel.id)}"
+              data-notify="${processingEnabled ? "false" : "true"}"
+              ${toggleDisabled}
+            ></button>
+            <button class="btn channel-config-btn" data-action="channel-config" data-id="${escapeAttr(channel.id)}">配置</button>
+          </div>
         </div>
       `;
     }

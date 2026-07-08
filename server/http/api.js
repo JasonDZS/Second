@@ -3,12 +3,16 @@
 const { handleAdminRoutes } = require("./routes/admin");
 const { handleDecisionRoutes } = require("./routes/decisions");
 const { handleIntegrationRoutes } = require("./routes/integrations");
+const { handleMobileRoutes } = require("./routes/mobile");
+const { handlePublicAccessRoutes } = require("./routes/public-access");
 const { handleSystemRoutes } = require("./routes/system");
 const { handleTaskRoutes } = require("./routes/tasks");
 
 const ROUTES = [
   handleSystemRoutes,
   handleIntegrationRoutes,
+  handlePublicAccessRoutes,
+  handleMobileRoutes,
   handleDecisionRoutes,
   handleTaskRoutes,
   handleAdminRoutes,

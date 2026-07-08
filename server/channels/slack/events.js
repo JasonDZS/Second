@@ -39,7 +39,16 @@ async function receiveEventCallback(body, profile, isKnownThread) {
   if (body.type === "url_verification") return response(200, { challenge: body.challenge });
   if (body.type !== "event_callback") return response(200, { ok: true });
   return receiveTaskEvent(body.event || {}, profile, isKnownThread, {
-    response: ({ task }) => ({ status: 200, body: { ok: true, taskId: task.id, channel: SLACK_CHANNEL_ID } }),
+    response: ({ task, skipped, reason }) => ({
+      status: 200,
+      body: {
+        ok: true,
+        ignored: Boolean(skipped),
+        reason: reason || undefined,
+        taskId: task?.id || null,
+        channel: SLACK_CHANNEL_ID,
+      },
+    }),
   });
 }
 

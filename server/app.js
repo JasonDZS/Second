@@ -1,5 +1,6 @@
 "use strict";
 
+const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const { URL } = require("url");
@@ -38,7 +39,7 @@ const {
 } = require("./channels");
 const { createChannelController } = require("./channels/controller");
 const { createChannelProcessor } = require("./channels/processor");
-const { getPublicSlackConfig, saveSlackConfig } = require("./slack-config");
+const { getPublicSlackConfig, getSlackConfig, saveSlackConfig } = require("./slack-config");
 const { createDecisionDomain } = require("./domain/decisions");
 const { computePhase1Metrics } = require("./domain/metrics");
 const { updateProfile } = require("./domain/profile");
@@ -49,10 +50,39 @@ const { createSseHub } = require("./http/sse");
 const { createStaticHandler } = require("./http/static");
 const { createRuntimeRecovery } = require("./runtime/recovery");
 const { createRuntimeResumeController } = require("./runtime/resume");
+const { createMobilePushService } = require("./mobile-push");
+const { createPublicAccessService } = require("./public-access");
 
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const DEFAULT_PORT = Number(process.env.PORT || process.env.SECOND_PORT || 7317);
 const PRODUCT_NAME = "Second";
+const MOBILE_HTML = path.join(PUBLIC_DIR, "mobile.html");
+
+const publicAccess = createPublicAccessService({
+  appendEvent,
+  getLocalUrl: () => {
+    const state = loadState();
+    return `http://127.0.0.1:${state.daemon?.port || DEFAULT_PORT}`;
+  },
+  loadState,
+  nowIso,
+  saveState,
+});
+const mobilePush = createMobilePushService({
+  appendEvent,
+  getPublicBaseUrl: () => publicAccess.publicBaseUrl() || getSlackConfig().publicUrl,
+  loadState,
+  nowIso,
+  saveState,
+});
+
+async function notifyDecisionRequestedEverywhere(decision, task) {
+  const results = await Promise.allSettled([
+    notifyDecisionRequested(decision, task),
+    mobilePush.notifyDecisionRequested(decision, task),
+  ]);
+  return results.map((item) => (item.status === "fulfilled" ? item.value : { ok: false, error: item.reason?.message || String(item.reason) }));
+}
 
 const {
   appendDecisionReply,
@@ -69,7 +99,7 @@ const {
   appendEvent,
   makeId,
   nowIso,
-  notifyDecisionRequested,
+  notifyDecisionRequested: notifyDecisionRequestedEverywhere,
   notifyDecisionResolved,
   saveState,
   stopTask,
@@ -86,8 +116,11 @@ const decorateState = createStateDecorator({
   DATA_DIR,
   DEFAULT_PORT,
   computePhase1Metrics,
+  getPublicAccessConfig: (state) => publicAccess.publicConfig(state),
+  getPublicMobilePushConfig: () => mobilePush.publicConfig(),
   getPublicSlackConfig,
   getRunningTasks,
+  listChannelAdapters,
 });
 const { resumeLatestTaskRun } = createRuntimeResumeController({
   PRODUCT_NAME,
@@ -155,8 +188,11 @@ const handleApi = createApiHandler({
   listChannelAdapters,
   loadState,
   markClarificationDecisionApproved,
+  mobilePush,
   nowIso,
   pauseTask,
+  processChannelEnvelope: channelProcessor.processChannelEnvelope,
+  publicAccess,
   readBody,
   resolveDecision,
   restartChannelTransports,
@@ -183,6 +219,7 @@ function createServer() {
       const channelAdapter = findHttpChannelAdapter(url.pathname);
       if (channelAdapter) return await handleChannel(req, res, url, channelAdapter);
       if (url.pathname.startsWith("/api/")) return await handleApi(req, res, url);
+      if (url.pathname === "/mobile.html") return serveMobileHtml(req, res, url);
       return serveStatic(req, res, url);
     } catch (error) {
       sendJson(res, error.statusCode || 500, {
@@ -190,6 +227,41 @@ function createServer() {
       });
     }
   });
+}
+
+function serveMobileHtml(_req, res, url) {
+  fs.readFile(MOBILE_HTML, "utf8", (error, html) => {
+    if (error) {
+      res.writeHead(404);
+      res.end("Not found");
+      return;
+    }
+    const pair = url.searchParams.get("pair") || url.searchParams.get("token") || "";
+    const manifestHref = mobilePush.verifyToken(pair)
+      ? `/api/mobile/manifest.webmanifest?pair=${encodeURIComponent(pair)}`
+      : "/manifest.webmanifest";
+    const rendered = html.replace(
+      /<link rel="manifest" href="[^"]*" \/>/,
+      `<link rel="manifest" href="${escapeHtmlAttr(manifestHref)}" />`,
+    );
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(rendered);
+  });
+}
+
+function escapeHtmlAttr(value) {
+  return String(value || "").replace(/[&<>"']/g, (char) => (
+    {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[char]
+  ));
 }
 
 function startServer({ port = DEFAULT_PORT, host = "127.0.0.1" } = {}) {
@@ -214,7 +286,10 @@ function startServer({ port = DEFAULT_PORT, host = "127.0.0.1" } = {}) {
       }
       restartChannelTransports();
       refreshSlackChannelNames().catch(() => {});
-      server.on("close", () => stopChannelTransports());
+      server.on("close", () => {
+        stopChannelTransports();
+        publicAccess.stopRuntime();
+      });
       resolve({ server, port: actualPort, host, url: `http://${host}:${actualPort}` });
     });
   });

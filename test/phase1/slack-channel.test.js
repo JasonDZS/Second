@@ -8,6 +8,7 @@ const {
   apiClient,
   appendDecisionReply,
   assert,
+  assistant,
   authViewUi,
   buildChannelFollowupPrompt,
   buildInitialPrompt,
@@ -179,6 +180,45 @@ test("Slack event helpers normalize task and decision envelopes", async () => {
   assert.equal(decisionEnvelope.optionId, "ok");
 });
 
+test("local assistant adapter normalizes chat messages as channel task input", () => {
+  const input = assistant.assistantMessageToTaskInput(
+    {
+      text: "帮我检查当前任务状态",
+      external: {
+        channel: "assistant",
+        threadTs: "local-assistant",
+        conversationId: "local-assistant",
+        messageId: "AM-1",
+        user: "Jason",
+      },
+    },
+    { name: "Jason", agentName: "Jason 的分身" },
+  );
+
+  assert.equal(input.channel.id, "assistant");
+  assert.equal(input.channel.name, "对话助手");
+  assert.equal(input.channel.external.messageId, "AM-1");
+  assert.equal(input.messageText, "帮我检查当前任务状态");
+  assert.equal(input.sourceMessage.type, "assistant");
+  assert.match(input.prompt, /local assistant chat/);
+  assert.match(input.prompt, /Do not use messaging connector tools/);
+});
+
+test("channel follow-up prompt names the local assistant instead of Slack", () => {
+  const prompt = buildChannelFollowupPrompt(
+    { id: "T-assistant", title: "原始任务", channel: { id: "assistant", name: "对话助手" } },
+    {
+      message: "继续根据上面的结果解释一下",
+      external: { channel: "assistant", threadTs: "local-assistant", conversationId: "local-assistant" },
+    },
+  );
+
+  assert.match(prompt, /same external 对话助手 conversation/);
+  assert.match(prompt, /same 对话助手 conversation/);
+  assert.match(prompt, /Latest 对话助手 message/);
+  assert.doesNotMatch(prompt, /Slack thread/);
+});
+
 test("Slack socket helper acknowledges envelopes and forwards normalized decisions", async () => {
   const sent = [];
   const processed = [];
@@ -329,6 +369,47 @@ test("channel controller refreshes Slack labels and owns transport lifecycle", a
   assert.equal(controller.findChannelThreadTask(state, { external: { threadTs: "100.1" } }).id, "T-slack-label");
 });
 
+test("channel processor skips new task envelopes when channel processing is disabled", () => {
+  const state = {
+    channels: [{ id: "slack", status: "connected", notify: false }],
+    events: [],
+    tasks: [],
+    decisions: [],
+  };
+  const calls = [];
+  const processor = channelProcessor.createChannelProcessor({
+    appendDecisionReply: () => {},
+    appendEvent: (target, event) => target.events.push(event),
+    broadcast: (event) => calls.push({ broadcast: event }),
+    createTask: () => {
+      calls.push({ created: true });
+      return { id: "T-disabled" };
+    },
+    decorateState: (target) => ({ eventCount: target.events.length }),
+    isTaskRunning: () => false,
+    loadState: () => state,
+    makeId: () => "F-disabled",
+    markClarificationDecisionApproved: () => {},
+    nowIso: () => "2026-07-08T00:00:00.000Z",
+    resolveDecision: () => ({}),
+    resumeCodexTask: () => {},
+    runCodexTask: () => {},
+    saveState: () => calls.push({ saved: true }),
+    shouldCompleteClarificationDecision: () => false,
+  });
+
+  const result = processor.processChannelEnvelope(
+    { id: "slack", name: "Slack" },
+    { kind: "task.requested", taskInput: { title: "ignored", channel: { id: "slack" } } },
+  );
+
+  assert.deepEqual(result, { skipped: true, reason: "channel_disabled", task: null });
+  assert.equal(calls.some((call) => call.created), false);
+  assert.equal(state.events[0].type, "channel.message.skipped");
+  assert.equal(calls.some((call) => call.saved), true);
+  assert.equal(calls.some((call) => call.broadcast?.state?.eventCount === 1), true);
+});
+
 test("channel follow-up prompt keeps Slack thread work in the same session", () => {
   const input = slack.slackEventToTaskInput(
     {
@@ -353,4 +434,3 @@ test("channel follow-up prompt keeps Slack thread work in the same session", () 
   assert.match(prompt, /继续查每个 key 的使用情况/);
   assert.match(prompt, /decision_request with type "补充"/);
 });
-

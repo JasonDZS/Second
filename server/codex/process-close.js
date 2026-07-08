@@ -247,7 +247,7 @@ function createCodexProcessCloseHandler(deps = {}) {
       const failedTask = failed.tasks.find((item) => item.id === taskId);
       if (failedTask) {
         failedTask.status = "paused";
-        failedTask.summary = `Slack 线程消息已排队,但恢复同一 Codex session 失败: ${error.message}`;
+        failedTask.summary = `外部会话消息已排队,但恢复同一 Codex session 失败: ${error.message}`;
       }
       appendEvent(failed, {
         type: "codex.channel.resume_failed",

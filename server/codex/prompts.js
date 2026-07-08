@@ -74,25 +74,35 @@ function buildResumePrompt(task, decision, options = {}) {
 }
 
 function buildChannelFollowupPrompt(task, options = {}) {
+  const channelName = channelPromptName(task, options.external);
+  const channelNoun = channelName === "Slack" ? "thread" : "conversation";
+  const latestLabel = channelName === "Slack" ? "Latest Slack message:" : `Latest ${channelName} message:`;
   return [
-    `${PRODUCT_NAME} received a new message in the same external Slack thread for this existing task.`,
+    `${PRODUCT_NAME} received a new message in the same external ${channelName} ${channelNoun} for this existing task.`,
     `Task ID: ${task.id}`,
     "",
     "Continue from the existing Codex session and use the prior context in this conversation.",
     "Treat the message below as the latest requester instruction or follow-up.",
     "Do not call messaging, email, or connector tools to reply directly.",
-    `Put the user-facing answer in your final response; ${PRODUCT_NAME} daemon will relay it back to the same Slack thread.`,
+    `Put the user-facing answer in your final response; ${PRODUCT_NAME} daemon will relay it back to the same ${channelName} ${channelNoun}.`,
     "- If required requester input, credentials, account access, file attachments, or business context is missing, call decision_request with type \"补充\" so this same session can resume later.",
     "",
-    options.external?.channel ? `Slack channel: ${options.external.channel}` : "",
-    options.external?.threadTs ? `Slack thread: ${options.external.threadTs}` : "",
+    options.external?.channel ? `${channelName} channel: ${options.external.channel}` : "",
+    options.external?.threadTs ? `${channelName} ${channelNoun}: ${options.external.threadTs}` : "",
     options.external?.user ? `Requester: ${options.external.user}` : "",
     "",
-    "Latest Slack message:",
+    latestLabel,
     options.message || "Continue the thread.",
   ]
     .filter((line) => line !== "")
     .join("\n");
+}
+
+function channelPromptName(task = {}, external = {}) {
+  if (task.channel?.name) return task.channel.name;
+  if (external.channel === "assistant" || external.conversationId) return "local assistant chat";
+  if (external.channel || external.threadTs) return "Slack";
+  return "external chat";
 }
 
 function buildReplyPrompt(task, decision, options = {}) {
@@ -139,5 +149,6 @@ module.exports = {
   buildInitialPrompt,
   buildReplyPrompt,
   buildResumePrompt,
+  channelPromptName,
   decisionRepliesForPrompt,
 };

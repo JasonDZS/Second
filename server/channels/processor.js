@@ -25,6 +25,7 @@ function createChannelProcessor(deps = {}) {
   function processChannelEnvelope(adapter, envelope) {
     if (envelope.kind === "task.requested") {
       const state = loadState();
+      if (!channelProcessingEnabled(state, adapter.id)) return skipDisabledChannelEnvelope(state, adapter);
       const continuation = processChannelThreadContinuation(adapter, envelope, state);
       if (continuation) {
         broadcast({ type: "state", state: decorateState(loadState()) });
@@ -130,15 +131,16 @@ function createChannelProcessor(deps = {}) {
       return { task, continuation: "queued" };
     }
 
+    const label = channelLabel(adapter);
     task.completedAt = null;
-    task.summary = `Slack 线程收到新消息,准备恢复 ${task.agent} 的同一 Codex session。`;
+    task.summary = `${label} 收到新消息,准备恢复 ${task.agent} 的同一 Codex session。`;
     task.trace.push({
       kind: "entry",
       actor: adapter.name,
       time: "刚刚",
-      title: "线程新消息",
+      title: "会话新消息",
       description: message.slice(0, 700),
-      meta: `thread · ${external.channel || ""}:${external.threadTs || ""}`,
+      meta: `conversation · ${external.channel || ""}:${external.threadTs || ""}`,
     });
     appendEvent(state, {
       type: "channel.thread.continuation",
@@ -168,6 +170,17 @@ function createChannelProcessor(deps = {}) {
     }
   }
 
+  function skipDisabledChannelEnvelope(state, adapter) {
+    appendEvent(state, {
+      type: "channel.message.skipped",
+      text: `channel.message.skipped ${adapter.id} disabled`,
+      channelId: adapter.id,
+    });
+    saveState(state);
+    broadcast({ type: "state", state: decorateState(loadState()) });
+    return { skipped: true, reason: "channel_disabled", task: null };
+  }
+
   function queueChannelFollowup(state, task, message, external, adapter) {
     const followup = {
       id: makeId("F"),
@@ -177,12 +190,12 @@ function createChannelProcessor(deps = {}) {
       external,
     };
     task.channelFollowups = [...(task.channelFollowups || []), followup].slice(-20);
-    task.summary = `Slack 线程收到新消息,已排队等待同一 Codex session 可恢复。`;
+    task.summary = `${channelLabel(adapter)} 收到新消息,已排队等待同一 Codex session 可恢复。`;
     task.trace.push({
       kind: "entry",
       actor: adapter.name,
       time: "刚刚",
-      title: "线程新消息已排队",
+      title: "会话新消息已排队",
       description: message.slice(0, 700),
       meta: `queue · ${task.channelFollowups.length}`,
     });
@@ -199,7 +212,8 @@ function createChannelProcessor(deps = {}) {
     const task = failed.tasks.find((item) => item.id === taskId);
     if (task) {
       task.status = "paused";
-      task.summary = `Slack 线程消息已记录,但恢复同一 Codex session 失败: ${error.message}`;
+      const adapterName = channelId === "assistant" ? "对话助手" : channelId;
+      task.summary = `${adapterName} 消息已记录,但恢复同一 Codex session 失败: ${error.message}`;
     }
     appendEvent(failed, {
       type: "channel.thread.resume_failed",
@@ -229,6 +243,12 @@ function createChannelProcessor(deps = {}) {
   };
 }
 
+function channelProcessingEnabled(state = {}, channelId = "") {
+  const channel = (state.channels || []).find((item) => item.id === channelId);
+  if (!channel) return true;
+  return channel.notify !== false;
+}
+
 function findChannelThreadTask(state, input = {}) {
   const external = channelExternal(input);
   if (!external.channel || !external.threadTs) return null;
@@ -248,7 +268,12 @@ function channelFollowupMessage(input = {}) {
   return input.messageText || input.message || input.text || String(input.prompt || "").split(/\n\n/).pop() || "";
 }
 
+function channelLabel(adapter = {}) {
+  return adapter.name || adapter.id || "外部会话";
+}
+
 module.exports = {
+  channelProcessingEnabled,
   channelExternal,
   channelFollowupMessage,
   createChannelProcessor,

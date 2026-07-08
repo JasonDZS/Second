@@ -40,6 +40,7 @@
       icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
     },
   ];
+  const TASK_BADGE_STATUSES = new Set(["running", "needs_human", "pending_resume", "resuming"]);
 
   function createShellView(deps = {}) {
     const {
@@ -52,6 +53,7 @@
 
     function sidebar(state = {}, ui = {}) {
       const pending = state.metrics?.pendingDecisions || 0;
+      const activeTasks = activeTaskCount(state);
       const engine = (state.engines || []).find((item) => item.id === state.settings?.defaultEngine) || (state.engines || [])[0];
       return `
         <nav class="sidebar" aria-label="${PRODUCT_NAME}">
@@ -59,7 +61,6 @@
             ${brandMark("brand-mark")}
             <div>
               <div class="brand-title">${PRODUCT_NAME}</div>
-              <div class="brand-sub">${escapeHtml(state.profile?.tagline || "")}</div>
             </div>
             <button class="mobile-settings-btn" data-action="nav" data-view="settings" aria-label="设置">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${NAV.find((item) => item.key === "settings")?.icon || ""}"></path></svg>
@@ -68,21 +69,21 @@
           <div class="nav-list">
             ${NAV.map((item) => {
               const active = ui.view === item.key ? " active" : "";
-              const badge = item.key === "inbox" && pending ? `<span class="nav-badge">${pending}</span>` : "";
+              const badge = navBadge(item.key, { activeTasks, pending });
               return `
                 <button class="nav-item nav-${escapeAttr(item.key)}${active}" data-action="nav" data-view="${item.key}">
                   <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${item.icon}"></path></svg>
-                  <span>${item.label}</span>
-                  <span style="flex:1"></span>
+                  ${navLabel(item.label)}
+                  <span class="nav-fill"></span>
                   ${badge}
                 </button>
               `;
             }).join("")}
           </div>
           <div class="sidebar-spacer"></div>
+          ${setupCard(state, ui, engine)}
           <div class="daemon-card">
             <div class="daemon-title"><span class="online-dot"></span>本地 daemon 在线</div>
-            <div class="daemon-meta">本地分身 adapter · ${engine?.status === "ok" ? "已连接" : "待检测"}<br>heartbeat 刚刚 · run 队列 ${state.metrics?.runningTasks || 0}</div>
           </div>
           <button class="profile-row" data-action="open-profile-settings" aria-label="用户设置">
             ${profileAvatarMarkup(state.profile || {}, "avatar")}
@@ -93,6 +94,31 @@
           </button>
         </nav>
       `;
+    }
+
+    function setupCard(state = {}, ui = {}) {
+      return `
+        <button class="setup-entry-card ${ui.view === "onboarding" ? "active" : ""}" data-action="nav" data-view="onboarding">
+          <span class="setup-entry-top">
+            <span class="setup-entry-title">初始化引导</span>
+          </span>
+          <span class="setup-entry-meta">Slack · Runtime · 真实手机端</span>
+        </button>
+      `;
+    }
+
+    function navBadge(key, counts) {
+      if (key === "inbox" && counts.pending) return `<span class="nav-badge">${counts.pending}</span>`;
+      if (key === "tasks" && counts.activeTasks) return `<span class="nav-badge">${counts.activeTasks}</span>`;
+      return "";
+    }
+
+    function navLabel(label) {
+      const chars = Array.from(label || "");
+      if (chars.length <= 2) {
+        return `<span class="nav-label short">${chars.map((char) => `<span>${escapeHtml(char)}</span>`).join("")}</span>`;
+      }
+      return `<span class="nav-label">${escapeHtml(label)}</span>`;
     }
 
     function profileSettingsModal(form = {}, ui = {}) {
@@ -186,7 +212,15 @@
     return escapeHtmlText(value);
   }
 
+  function activeTaskCount(state = {}) {
+    if (Array.isArray(state.tasks)) {
+      return state.tasks.filter((task) => !task.archivedAt && TASK_BADGE_STATUSES.has(task.status)).length;
+    }
+    return Number(state.metrics?.runningTasks || 0);
+  }
+
   return {
+    activeTaskCount,
     NAV,
     createShellView,
   };

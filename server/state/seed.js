@@ -274,6 +274,15 @@ function seedState() {
       defaultEngine: "codex",
       autoDetect: true,
       codexNetworkAccess: false,
+      publicAccess: {
+        enabled: false,
+        provider: "manual",
+        manualUrl: "",
+        activeUrl: "",
+        status: "off",
+        lastCheck: null,
+        lastError: "",
+      },
       lastScan: null,
     },
     engines: [
@@ -313,6 +322,14 @@ function seedState() {
     ],
     channels: [
       {
+        id: "assistant",
+        name: "对话助手",
+        mono: "A",
+        status: "connected",
+        notify: true,
+        meta: "本地浮动消息助手 · 右下角常驻 · 结果回传到本机对话",
+      },
+      {
         id: "slack",
         name: "Slack",
         mono: "S",
@@ -324,9 +341,9 @@ function seedState() {
         id: "linear",
         name: "Linear",
         mono: "L",
-        status: "connected",
-        notify: true,
-        meta: "团队 BAT · 监听指派给我的 issue · 状态自动同步",
+        status: "not_configured",
+        notify: false,
+        meta: "连接后,支持指派给我的 issue 与状态自动同步",
       },
       {
         id: "clickup",
@@ -353,6 +370,10 @@ function seedState() {
         meta: "适配层占位: 后续接入钉钉机器人消息与互动卡片",
       },
     ],
+    assistant: {
+      activeConversationId: "local-assistant",
+      messages: [],
+    },
     decisions,
     tasks,
     preferences: [

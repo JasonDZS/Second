@@ -115,7 +115,7 @@ function createRuntimeTaskExecutor(deps = {}) {
       mode === "reply"
         ? `你已补充信息,daemon 正在恢复${task.agent}补证据。`
         : mode === "channel"
-          ? `Slack 线程有新消息,daemon 正在恢复${task.agent}的同一会话。`
+          ? `外部会话有新消息,daemon 正在恢复${task.agent}的同一会话。`
           : `Human Gate 已处理,daemon 正在恢复${task.agent}的同一会话。`;
     task.trace.push({
       kind: "runtime",
@@ -126,7 +126,7 @@ function createRuntimeTaskExecutor(deps = {}) {
         mode === "reply"
           ? `${task.agent}正在读取你的补充信息并准备回复。`
           : mode === "channel"
-            ? `${task.agent}正在读取 Slack 线程的新消息,并沿用同一 Codex session。`
+            ? `${task.agent}正在读取外部会话的新消息,并沿用同一 Codex session。`
             : `${task.agent}正在恢复同一会话。`,
     });
     appendEvent(state, {
