@@ -35,6 +35,9 @@
       mobileMockStatus: "idle",
       authLab: {
         input: "rg TODO server",
+        taskId: "",
+        workspace: "",
+        environment: "local",
         result: null,
         error: "",
       },

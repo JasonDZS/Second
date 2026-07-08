@@ -122,6 +122,7 @@ function parseBashCommand(command, context) {
   let reversibility = "unknown";
   let identity = "agent";
   let environment = environmentFromText(unwrapped);
+  if (environment === "local" && context.environment) environment = context.environment;
 
   if (/\b(?:cat|less|more|head|tail|grep|rg|sed|awk)\b/i.test(unwrapped) && labels.has("secret")) {
     riskTags.add("expose_credentials");
@@ -206,7 +207,9 @@ function parseFileTool(payload, context, toolName) {
   return baseIntent({
     action: candidatePath ? "write" : "unknown",
     target,
-    environment: environmentFromText(candidatePath || text),
+    environment: environmentFromText(candidatePath || text) === "local" && context.environment
+      ? context.environment
+      : environmentFromText(candidatePath || text),
     reversibility: target.scope === "workspace" ? "reversible" : "hard_to_reverse",
     identity: "agent",
     labels: target.labels,

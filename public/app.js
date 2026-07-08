@@ -274,9 +274,9 @@
     if (event.target.matches("[data-reply-field]")) {
       ui.replyDrafts[event.target.dataset.decisionId] = event.target.value;
     }
-    if (event.target.matches("[data-auth-lab-field='input']")) {
+    if (event.target.matches("[data-auth-lab-field]")) {
       if (!ui.authLab) ui.authLab = {};
-      ui.authLab.input = event.target.value;
+      ui.authLab[event.target.dataset.authLabField] = event.target.value;
     }
     if (event.target.matches("[data-assistant-field='draft']")) {
       ui.assistantDraft = event.target.value;

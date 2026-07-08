@@ -32,6 +32,7 @@ function createLabelContext(input = {}) {
     runtimeContext.cwd ||
     process.cwd();
   return {
+    environment: input.environment || input.env || taskContext.environment || runtimeContext.environment || "",
     workspaceRoot: path.resolve(String(workspaceRoot || process.cwd())),
     sourceWorkspace: taskContext.sourceWorkspace || runtimeContext.sourceWorkspace || "",
   };

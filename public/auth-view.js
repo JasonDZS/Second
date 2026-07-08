@@ -53,6 +53,11 @@
       const lab = ui.authLab || {};
       const input = lab.input || "rg TODO server";
       const result = lab.result || null;
+      const tasks = (state.tasks || []).filter((task) => !task.archivedAt).slice(0, 20);
+      const selectedTaskId = lab.taskId || tasks[0]?.id || "";
+      const selectedTask = tasks.find((task) => task.id === selectedTaskId) || tasks[0] || {};
+      const workspace = lab.workspace || selectedTask.workspace || "";
+      const environment = lab.environment || "local";
       const recentAuth = (state.decisions || []).filter((decision) => decision.authorization).slice(0, 4);
       const grants = (state.authorization?.grants || []).slice(0, 5);
       return `
@@ -64,6 +69,22 @@
           <div style="padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:14px">
             <div>
               <textarea data-auth-lab-field="input" spellcheck="false" style="width:100%;min-height:112px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.45 var(--mono);background:#FFFDF8;color:var(--ink)">${escapeHtml(input)}</textarea>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:8px;margin-top:10px">
+                <label style="display:grid;gap:4px;font-size:11px;color:var(--muted);font-weight:700">Task
+                  <select data-auth-lab-field="taskId" style="height:34px;border:1px solid var(--line);border-radius:7px;background:#FFFDF8;color:var(--ink);padding:0 8px">
+                    <option value="">无 task context</option>
+                    ${tasks.map((task) => `<option value="${escapeAttr(task.id)}" ${task.id === selectedTaskId ? "selected" : ""}>${escapeHtml(task.id)} · ${escapeHtml(task.title || task.workspace || "task")}</option>`).join("")}
+                  </select>
+                </label>
+                <label style="display:grid;gap:4px;font-size:11px;color:var(--muted);font-weight:700">Workspace
+                  <input data-auth-lab-field="workspace" value="${escapeAttr(workspace)}" placeholder="workspace path" style="height:34px;border:1px solid var(--line);border-radius:7px;background:#FFFDF8;color:var(--ink);padding:0 8px;font:11px var(--mono)" />
+                </label>
+                <label style="display:grid;gap:4px;font-size:11px;color:var(--muted);font-weight:700">Env
+                  <select data-auth-lab-field="environment" style="height:34px;border:1px solid var(--line);border-radius:7px;background:#FFFDF8;color:var(--ink);padding:0 8px">
+                    ${["local", "dev", "staging", "prod", "external", "unknown"].map((item) => `<option value="${item}" ${item === environment ? "selected" : ""}>${item}</option>`).join("")}
+                  </select>
+                </label>
+              </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
                 <button class="btn btn-primary" data-action="auth-lab-submit" style="font-size:11px;padding:7px 12px;border-radius:6px">测试授权</button>
                 <button class="btn" data-action="auth-lab-example" data-example="allow" style="font-size:11px;padding:7px 10px;border-radius:6px">Allow 样例</button>

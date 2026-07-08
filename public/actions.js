@@ -262,7 +262,7 @@
           ui.authLab.error = "";
           render();
           try {
-            const requestBody = authLabRequestBody(ui.authLab.input);
+            const requestBody = authLabRequestBody(ui.authLab, state);
             const result = await api("/api/authorize", {
               method: "POST",
               body: {
@@ -574,16 +574,41 @@
     return "rg TODO server";
   }
 
-  function authLabRequestBody(input) {
-    const text = String(input || "").trim();
+  function authLabRequestBody(input, state = {}) {
+    const lab = typeof input === "object" && input !== null ? input : { input };
+    const text = String(lab.input || "").trim();
+    let body;
     if (text.startsWith("{")) {
       const parsed = JSON.parse(text);
-      return parsed && typeof parsed === "object" ? parsed : { tool: "Bash", command: text };
+      body = parsed && typeof parsed === "object" ? parsed : { tool: "Bash", command: text };
+    } else {
+      body = {
+        tool: "Bash",
+        command: text || "rg TODO server",
+      };
     }
-    return {
-      tool: "Bash",
-      command: text || "rg TODO server",
+    return withAuthLabContext(body, lab, state);
+  }
+
+  function withAuthLabContext(body, lab = {}, state = {}) {
+    const tasks = state.tasks || [];
+    const selectedTaskId = lab.taskId || tasks[0]?.id || "";
+    const task = tasks.find((item) => item.id === selectedTaskId) || tasks[0] || {};
+    const workspace = lab.workspace || task.workspace || "";
+    const environment = lab.environment || "local";
+    const next = { ...body };
+    if (!next.taskId && selectedTaskId) next.taskId = selectedTaskId;
+    if (!next.workspace && workspace) next.workspace = workspace;
+    next.task_ctx = {
+      ...(next.task_ctx || next.taskContext || {}),
+      ...(workspace ? { workspace } : {}),
+      ...(next.taskId ? { taskId: next.taskId } : {}),
     };
+    next.runtime_ctx = {
+      ...(next.runtime_ctx || next.runtimeContext || {}),
+      environment,
+    };
+    return next;
   }
 
   function publicAccessFormFromPublic(access = {}) {

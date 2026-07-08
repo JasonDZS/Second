@@ -384,6 +384,7 @@ test("frontend auth view renders candidates and authorization rules", () => {
   const auth = authViewUi.createAuthView(presentation);
   const html = auth.render({
     preferences: [{ text: "中文 PR 描述", source: "PREFERENCES.md" }],
+    tasks: [{ id: "T-auth", title: "授权测试任务", workspace: "/tmp/workspace" }],
     decisions: [{ id: "D-auth", status: "pending", authorization: { fingerprint: "abc123" } }],
     authorization: { grants: [{ id: "G-1", status: "active", fingerprint: "abc123" }] },
     candidates: [{ id: "C-1", confidence: "高", status: "pending", text: "允许本地测试", source: "history" }],
@@ -409,6 +410,9 @@ test("frontend auth view renders candidates and authorization rules", () => {
   assert.match(html, /授权与记忆/);
   assert.match(html, /Authorization Lab/);
   assert.match(html, /data-action="auth-lab-submit"/);
+  assert.match(html, /data-auth-lab-field="taskId"/);
+  assert.match(html, /data-auth-lab-field="workspace"/);
+  assert.match(html, /data-auth-lab-field="environment"/);
   assert.match(html, /deny\.expose_credentials/);
   assert.match(html, /Grant ledger/);
   assert.match(html, /data-action="candidate"/);
@@ -1144,7 +1148,16 @@ test("frontend action handler mutates UI state through injected dependencies", a
 });
 
 test("frontend authorization lab submits dry-run requests to daemon API", async () => {
-  const ui = { authLab: { input: "psql prod -c 'update orders set status=1'", result: null, error: "" } };
+  const ui = {
+    authLab: {
+      input: "psql prod -c 'update orders set status=1'",
+      taskId: "T-auth",
+      workspace: "/tmp/second-auth-workspace",
+      environment: "prod",
+      result: null,
+      error: "",
+    },
+  };
   const calls = [];
   let renders = 0;
   const handler = actions.createActionHandler({
@@ -1162,7 +1175,11 @@ test("frontend authorization lab submits dry-run requests to daemon API", async 
     currentProfileForm: () => ({}),
     currentPublicAccessForm: () => ({}),
     currentSlackForm: () => ({}),
-    getState: () => ({ decisions: [], integrations: {} }),
+    getState: () => ({
+      decisions: [],
+      integrations: {},
+      tasks: [{ id: "T-auth", workspace: "/tmp/second-auth-workspace" }],
+    }),
     profileFormFromState: () => ({}),
     refresh: async () => {},
     render: () => {
@@ -1179,6 +1196,10 @@ test("frontend authorization lab submits dry-run requests to daemon API", async 
   assert.equal(calls[0].options.body.dryRun, true);
   assert.equal(calls[0].options.body.mode, "dry_run");
   assert.equal(calls[0].options.body.command, "psql prod -c 'update orders set status=1'");
+  assert.equal(calls[0].options.body.taskId, "T-auth");
+  assert.equal(calls[0].options.body.workspace, "/tmp/second-auth-workspace");
+  assert.equal(calls[0].options.body.task_ctx.workspace, "/tmp/second-auth-workspace");
+  assert.equal(calls[0].options.body.runtime_ctx.environment, "prod");
   assert.equal(ui.authLab.result.action, "gate");
   assert.ok(renders >= 2);
 

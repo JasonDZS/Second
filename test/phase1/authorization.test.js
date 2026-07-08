@@ -44,6 +44,15 @@ test("authorization engine allows workspace reads, gates prod writes, denies sec
   const unknown = authorizationEngine.evaluateAuthorization({ tool: "Bash", command: "custom-prod-tool --flag" });
   assert.equal(unknown.action, "gate");
   assert.equal(unknown.intent.action, "unknown");
+
+  const envTagged = authorizationEngine.evaluateAuthorization({
+    tool: "Bash",
+    command: "touch service.log",
+    runtime_ctx: { environment: "staging" },
+  });
+  assert.equal(envTagged.action, "gate");
+  assert.equal(envTagged.ruleId, "gate.prod_write");
+  assert.equal(envTagged.intent.environment, "staging");
 });
 
 test("authorization parser handles wrapper, path, self-protection, and outbound adversarial cases", () => {
