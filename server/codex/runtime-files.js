@@ -43,7 +43,7 @@ function prepareCodexRuntimeFiles(task, state = {}) {
   if (fs.existsSync(rulesSource)) fs.copyFileSync(rulesSource, rulesTarget);
 
   const daemon = daemonAddress(state);
-  const sandboxLines = codexNetworkAccessEnabled(state)
+  const sandboxLines = codexRawNetworkAccessEnabled()
     ? ["", "[sandbox_workspace_write]", "network_access = true"]
     : [];
   fs.writeFileSync(
@@ -120,8 +120,12 @@ function codexNetworkAccessEnabled(state = {}) {
   return Boolean(state.settings?.codexNetworkAccess);
 }
 
-function codexNetworkArgs(state = {}) {
-  return codexNetworkAccessEnabled(state) ? ["-c", "sandbox_workspace_write.network_access=true"] : [];
+function codexRawNetworkAccessEnabled(sourceEnv = process.env) {
+  return isTruthy(sourceEnv.SECOND_CODEX_RAW_NETWORK_ACCESS || sourceEnv.CODEX_RAW_NETWORK_ACCESS);
+}
+
+function codexNetworkArgs(_state = {}, sourceEnv = process.env) {
+  return codexRawNetworkAccessEnabled(sourceEnv) ? ["-c", "sandbox_workspace_write.network_access=true"] : [];
 }
 
 function codexEnv(state, task, sourceEnv = process.env) {
@@ -164,6 +168,7 @@ module.exports = {
   CODEX_AUTHORIZATION_TOOL_MATCHER,
   codexNetworkAccessEnabled,
   codexNetworkArgs,
+  codexRawNetworkAccessEnabled,
   daemonAddress,
   prepareCodexRuntimeFiles,
 };

@@ -160,10 +160,10 @@
           <div class="setup-runtime-list">
             ${engines.map((engine) => runtimeRow(engine, defaultEngine, ui)).join("") || emptySetup("尚未检测到执行引擎", "点击重新检测,Second 会扫描 PATH 和常见安装目录。")}
           </div>
-          <div class="setup-footnote">默认引擎会用于新任务和从 Human Gate 恢复的任务。Codex CLI 的网络访问只影响新启动的 run。</div>
+          <div class="setup-footnote">默认引擎会用于新任务和从 Human Gate 恢复的任务。网络代理只影响新启动的 run,外部请求仍需 daemon 授权。</div>
           <div class="setup-action-row">
             <button class="setup-primary-btn small" data-action="detect-engines">${ui.busy === true ? "检测中..." : "重新检测 runtime"}</button>
-            <button class="setup-secondary-btn" data-action="codex-network-toggle" data-enabled="${networkEnabled ? "false" : "true"}">${networkEnabled ? "关闭 Codex 网络访问" : "开启 Codex 网络访问"}</button>
+            <button class="setup-secondary-btn" data-action="codex-network-toggle" data-enabled="${networkEnabled ? "false" : "true"}">${networkEnabled ? "关闭授权网络代理" : "开启授权网络代理"}</button>
             <button class="setup-secondary-btn" data-action="nav" data-view="runtime">打开运行时</button>
           </div>
         </section>

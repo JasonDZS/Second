@@ -765,7 +765,8 @@ test("frontend settings view renders engines, channel details, and network toggl
   assert.match(html, /data-action="public-access-stop"/);
   assert.match(html, /https:\/\/second\.example\.com/);
   assert.match(html, /data-action="codex-network-toggle"/);
-  assert.match(html, /本地智能体网络访问/);
+  assert.match(html, /本地智能体网络代理/);
+  assert.match(html, /SECOND_AUTH_PROXY/);
   assert.doesNotMatch(html, /Codex CLI 网络访问/);
   assert.doesNotMatch(html, /检测方式/);
   assert.match(html, /data-action="channel-config" data-id="slack"/);

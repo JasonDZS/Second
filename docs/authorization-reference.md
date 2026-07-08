@@ -91,3 +91,5 @@ Profile authorization files are created with owner-only modes where the filesyst
 `POST /api/proxy/http` is the daemon-owned outbound HTTP path. It accepts `method`, `url`, optional `headers`, optional `body`, and optional `taskId`, then calls the same authorization engine before any outbound request is made. Gate/deny responses do not touch the network.
 
 Codex run environments receive `SECOND_AUTH_PROXY=<daemon>/api/proxy/http`. Agent-supplied credential headers such as `Authorization`, `Cookie`, and `X-Api-Key` are stripped; long-lived service credentials should stay inside daemon channel adapters or future credential proxy code, not inside agent context.
+
+The UI network toggle enables this authorized proxy path for new runs. It does not set Codex `sandbox_workspace_write.network_access=true`; raw Codex network access requires an explicit daemon launch environment override, `SECOND_CODEX_RAW_NETWORK_ACCESS=1`, and should be treated as a debugging escape hatch.

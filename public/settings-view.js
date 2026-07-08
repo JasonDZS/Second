@@ -213,13 +213,13 @@
         <div class="settings-card compact-card">
           <div class="settings-head">
             <div style="flex:1">
-              <div class="settings-name">本地智能体网络访问</div>
-              <div class="settings-meta">开启后,新任务和恢复任务会允许本地执行引擎访问网络; Codex CLI 会映射到 <span class="mono">workspace-write</span> 网络开关。</div>
+              <div class="settings-name">本地智能体网络代理</div>
+              <div class="settings-meta">开启后,新任务会获得 <span class="mono">SECOND_AUTH_PROXY</span>; 外部请求必须先走 daemon 授权,不会直接打开 Codex 原生网络开关。</div>
             </div>
             <button
               class="toggle ${enabled ? "on" : ""}"
               type="button"
-              aria-label="${enabled ? "关闭本地智能体网络访问" : "开启本地智能体网络访问"}"
+              aria-label="${enabled ? "关闭本地智能体网络代理" : "开启本地智能体网络代理"}"
               data-action="codex-network-toggle"
               data-enabled="${enabled ? "false" : "true"}"
             ></button>
@@ -227,7 +227,7 @@
           <div class="settings-card-body">
             <div class="settings-meta" style="margin-top:0">
               当前状态: <b style="color:${enabled ? "var(--green)" : "var(--muted)"}">${enabled ? "已开启" : "未开启"}</b>。
-              代理环境变量仍然继承自启动 daemon 的 shell;如果需要代理,请在启动 ${PRODUCT_NAME} 前配置 <span class="mono">HTTPS_PROXY</span> / <span class="mono">ALL_PROXY</span>。
+              如需极端调试的原生网络,必须由启动环境显式设置 <span class="mono">SECOND_CODEX_RAW_NETWORK_ACCESS=1</span>。
             </div>
           </div>
         </div>

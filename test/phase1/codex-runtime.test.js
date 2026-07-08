@@ -281,7 +281,7 @@ test("Codex runtime adapter prepares run and resume invocations", () => {
     assert.deepEqual(run.args.slice(0, 4), ["exec", "--json", "--skip-git-repo-check", "--sandbox"]);
     assert.equal(run.cwd, workspace);
     assert.equal(run.outputFile, task.outputFile);
-    assert.ok(run.args.includes("sandbox_workspace_write.network_access=true"));
+    assert.equal(run.args.includes("sandbox_workspace_write.network_access=true"), false);
     assert.ok(fs.existsSync(path.join(workspace, ".codex", "config.toml")));
 
     const resume = adapter.prepareResume(task, state, { id: "D-adapter", status: "approved" }, { mode: "channel", message: "follow up" });
@@ -547,13 +547,11 @@ test("Codex runtime files are generated inside each run workspace", () => {
   }
 });
 
-test("Codex network access is opt-in and emitted as CLI/config override", () => {
+test("Codex network access uses daemon proxy unless raw network is explicitly enabled", () => {
   assert.deepEqual(codexNetworkArgs({ settings: { codexNetworkAccess: false } }), []);
-  assert.deepEqual(codexNetworkArgs({ settings: { codexNetworkAccess: true } }), [
-    "-c",
-    "sandbox_workspace_write.network_access=true",
-  ]);
-  assert.deepEqual(codexRuntimeFiles.codexNetworkArgs({ settings: { codexNetworkAccess: true } }), [
+  assert.deepEqual(codexNetworkArgs({ settings: { codexNetworkAccess: true } }), []);
+  assert.deepEqual(codexRuntimeFiles.codexNetworkArgs({ settings: { codexNetworkAccess: true } }), []);
+  assert.deepEqual(codexRuntimeFiles.codexNetworkArgs({}, { SECOND_CODEX_RAW_NETWORK_ACCESS: "1" }), [
     "-c",
     "sandbox_workspace_write.network_access=true",
   ]);
@@ -565,8 +563,9 @@ test("Codex network access is opt-in and emitted as CLI/config override", () => 
       { daemon: { port: 7317 }, settings: { codexNetworkAccess: true } },
     );
     const config = fs.readFileSync(files.configFile, "utf8");
-    assert.match(config, /\[sandbox_workspace_write\]/);
-    assert.match(config, /network_access = true/);
+    assert.doesNotMatch(config, /\[sandbox_workspace_write\]/);
+    assert.doesNotMatch(config, /network_access = true/);
+    assert.match(config, /SECOND_AUTH_PROXY/);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }

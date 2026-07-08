@@ -166,7 +166,7 @@
             method: "POST",
             body: { enabled },
           });
-          showToast(enabled ? "本地智能体网络访问已开启" : "本地智能体网络访问已关闭");
+          showToast(enabled ? "授权网络代理已开启" : "授权网络代理已关闭");
           await refresh();
         } else if (data.action === "public-access-save") {
           const form = currentPublicAccessForm();

@@ -60,7 +60,7 @@ async function handleSystemRoutes(req, res, url, ctx) {
     state.settings.codexNetworkAccess = Boolean(body.enabled);
     appendEvent(state, {
       type: "settings.codex_network",
-      text: `settings.codex_network ${state.settings.codexNetworkAccess ? "enabled" : "disabled"}`,
+      text: `settings.codex_authorized_network_proxy ${state.settings.codexNetworkAccess ? "enabled" : "disabled"}`,
     });
     saveState(state);
     broadcast({ type: "state", state: decorateState(loadState()) });
