@@ -47,6 +47,11 @@
         mobilePairingQrSvg: "",
         mobilePairingUrl: "",
         mobileMockStatus: "idle",
+        authLab: {
+          input: "rg TODO server",
+          result: null,
+          error: "",
+        },
         onboardingStep: 0,
         onboardingAuthLevel: "balanced",
         profilePanel: false,
@@ -269,6 +274,10 @@
     if (event.target.matches("[data-reply-field]")) {
       ui.replyDrafts[event.target.dataset.decisionId] = event.target.value;
     }
+    if (event.target.matches("[data-auth-lab-field='input']")) {
+      if (!ui.authLab) ui.authLab = {};
+      ui.authLab.input = event.target.value;
+    }
     if (event.target.matches("[data-assistant-field='draft']")) {
       ui.assistantDraft = event.target.value;
     }
@@ -448,7 +457,7 @@
   }
 
   function authView() {
-    return authViewRenderer.render(state);
+    return authViewRenderer.render(state, ui);
   }
 
   function mobileView() {

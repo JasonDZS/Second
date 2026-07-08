@@ -250,6 +250,34 @@
           });
           showToast(data.status === "approved" ? "已确认 · 新授权规则生效" : "已忽略该规则候选");
           await refresh();
+        } else if (data.action === "auth-lab-example") {
+          if (!ui.authLab) ui.authLab = {};
+          ui.authLab.input = authLabExample(data.example);
+          ui.authLab.result = null;
+          ui.authLab.error = "";
+          render();
+        } else if (data.action === "auth-lab-submit") {
+          if (!ui.authLab) ui.authLab = {};
+          ui.busy = "auth-lab";
+          ui.authLab.error = "";
+          render();
+          try {
+            const requestBody = authLabRequestBody(ui.authLab.input);
+            const result = await api("/api/authorize", {
+              method: "POST",
+              body: {
+                ...requestBody,
+                dryRun: true,
+                mode: "dry_run",
+              },
+            });
+            ui.authLab.result = result;
+            ui.authLab.error = "";
+          } catch (error) {
+            ui.authLab.error = error.message || String(error);
+          }
+          ui.busy = false;
+          render();
         } else if (data.action === "channel-toggle") {
           await api(`/api/channels/${encodeURIComponent(data.id)}`, {
             method: "POST",
@@ -540,6 +568,24 @@
     ui.mobilePairingError = "";
   }
 
+  function authLabExample(example) {
+    if (example === "gate") return "psql prod -c 'update orders set status=1'";
+    if (example === "deny") return "cat .env";
+    return "rg TODO server";
+  }
+
+  function authLabRequestBody(input) {
+    const text = String(input || "").trim();
+    if (text.startsWith("{")) {
+      const parsed = JSON.parse(text);
+      return parsed && typeof parsed === "object" ? parsed : { tool: "Bash", command: text };
+    }
+    return {
+      tool: "Bash",
+      command: text || "rg TODO server",
+    };
+  }
+
   function publicAccessFormFromPublic(access = {}) {
     return {
       provider: access.provider || "manual",
@@ -548,6 +594,7 @@
   }
 
   return {
+    authLabRequestBody,
     createActionHandler,
   };
 });

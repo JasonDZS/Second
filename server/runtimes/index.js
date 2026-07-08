@@ -11,6 +11,11 @@ const runtimeAdapters = [
     command: "claude",
     versionArgs: ["--version"],
     status: "probe-only",
+    authorization: {
+      mode: "none",
+      yellowZone: "deny",
+      reason: "Claude adapter is probe-only until action-level hooks or an MCP proxy are configured.",
+    },
     normalizeEvent(raw, context = {}) {
       return codex.normalizeAgentRuntimeEvent("claude", raw, context);
     },

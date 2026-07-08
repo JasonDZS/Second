@@ -376,6 +376,11 @@ function seedState() {
     },
     decisions,
     tasks,
+    authorization: {
+      grants: [],
+      audit: [],
+      quotas: {},
+    },
     preferences: [
       {
         text: "PR 描述使用中文,附风险清单与回滚方式",

@@ -33,6 +33,11 @@
       mobilePairingQrSvg: "",
       mobilePairingUrl: "",
       mobileMockStatus: "idle",
+      authLab: {
+        input: "rg TODO server",
+        result: null,
+        error: "",
+      },
       onboardingStep: 0,
       onboardingAuthLevel: "balanced",
       onboardingMobileSkipped: false,

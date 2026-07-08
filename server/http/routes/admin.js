@@ -1,8 +1,14 @@
 "use strict";
 
+const { addGreenAuthorizationRule } = require("../../authorization/policy-loader");
+const { applyExtractedCandidates } = require("../../authorization/rule-candidates");
+
 async function handleAdminRoutes(req, res, url, ctx) {
   const {
+    appendAuthorizationAudit,
     appendEvent,
+    authorizationPolicyFile,
+    authorizationSummaryFile,
     broadcast,
     decorateState,
     loadState,
@@ -10,6 +16,22 @@ async function handleAdminRoutes(req, res, url, ctx) {
     saveState,
     sendJson,
   } = ctx;
+
+  if (req.method === "POST" && url.pathname === "/api/candidates/extract") {
+    const body = await readBody(req);
+    const state = loadState();
+    const candidates = applyExtractedCandidates(state, {
+      minApprovals: body.minApprovals,
+    });
+    appendEvent(state, {
+      type: "rule.candidates.extracted",
+      text: `rule.candidates.extracted count=${candidates.length}`,
+    });
+    saveState(state);
+    broadcast({ type: "state", state: decorateState(state) });
+    sendJson(res, 200, { candidates });
+    return true;
+  }
 
   const candidateMatch = url.pathname.match(/^\/api\/candidates\/([^/]+)$/);
   if (req.method === "POST" && candidateMatch) {
@@ -22,8 +44,23 @@ async function handleAdminRoutes(req, res, url, ctx) {
     }
     candidate.status = body.status === "approved" ? "approved" : "ignored";
     if (candidate.status === "approved") {
+      if (candidate.rule) {
+        addGreenAuthorizationRule(candidate.rule, {
+          candidate,
+          policyFile: authorizationPolicyFile,
+          summaryFile: authorizationSummaryFile,
+        });
+        appendAuthorizationAudit?.(state, {
+          event: "authorization.rule.created",
+          candidateId: candidate.id,
+          ruleId: candidate.rule.id,
+          rule: candidate.rule,
+          decisionIds: candidate.decisionIds || [],
+          reason: `Confirmed rule candidate ${candidate.id}.`,
+        });
+      }
       state.rules.unshift({
-        id: candidate.id.replace("RC", "AR"),
+        id: candidate.rule?.id || candidate.id.replace("RC", "AR"),
         kind: "允许",
         text: candidate.text,
         source: `由你刚刚确认 · lineage: ${candidate.id} ← ${candidate.source}`,

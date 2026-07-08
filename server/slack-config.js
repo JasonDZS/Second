@@ -9,30 +9,34 @@ const SLACK_CONFIG_FILE = path.join(SECRET_DIR, "slack.json");
 
 function getSlackConfig() {
   const stored = readStoredSlackConfig();
+  return effectiveSlackConfig(stored, process.env);
+}
+
+function effectiveSlackConfig(stored = {}, env = process.env) {
   return {
-    botToken: process.env.SLACK_BOT_TOKEN || stored.botToken || "",
-    appToken: process.env.SLACK_APP_TOKEN || stored.appToken || "",
-    signingSecret: process.env.SLACK_SIGNING_SECRET || stored.signingSecret || "",
-    publicUrl: normalizeBaseUrl(process.env.SECOND_PUBLIC_URL || stored.publicUrl || ""),
+    botToken: env.SLACK_BOT_TOKEN || stored.botToken || "",
+    appToken: env.SLACK_APP_TOKEN || stored.appToken || "",
+    signingSecret: env.SLACK_SIGNING_SECRET || stored.signingSecret || "",
+    publicUrl: normalizeBaseUrl(env.SECOND_PUBLIC_URL || stored.publicUrl || ""),
     decisionChannel:
-      process.env.SECOND_SLACK_DECISION_CHANNEL ||
-      process.env.SLACK_DECISION_CHANNEL ||
+      env.SECOND_SLACK_DECISION_CHANNEL ||
+      env.SLACK_DECISION_CHANNEL ||
       stored.decisionChannel ||
       "",
     socketMode:
-      truthy(process.env.SECOND_SLACK_SOCKET_MODE || process.env.SLACK_SOCKET_MODE) ||
+      truthy(env.SECOND_SLACK_SOCKET_MODE || env.SLACK_SOCKET_MODE) ||
       Boolean(stored.socketMode),
     customizeProfileMessages:
-      truthy(process.env.SECOND_SLACK_CUSTOMIZE_PROFILE || process.env.SLACK_CUSTOMIZE_PROFILE) ||
+      truthy(env.SECOND_SLACK_CUSTOMIZE_PROFILE || env.SLACK_CUSTOMIZE_PROFILE) ||
       Boolean(stored.customizeProfileMessages),
     allowedUsers:
-      process.env.SECOND_SLACK_ALLOWED_USERS ||
-      process.env.SLACK_ALLOWED_USERS ||
+      env.SECOND_SLACK_ALLOWED_USERS ||
+      env.SLACK_ALLOWED_USERS ||
       stored.allowedUsers ||
       "",
     allowedChannels:
-      process.env.SECOND_SLACK_ALLOWED_CHANNELS ||
-      process.env.SLACK_ALLOWED_CHANNELS ||
+      env.SECOND_SLACK_ALLOWED_CHANNELS ||
+      env.SLACK_ALLOWED_CHANNELS ||
       stored.allowedChannels ||
       "",
   };
@@ -40,7 +44,11 @@ function getSlackConfig() {
 
 function getPublicSlackConfig() {
   const stored = readStoredSlackConfig();
-  const effective = getSlackConfig();
+  return publicSlackConfigFrom(stored, process.env);
+}
+
+function publicSlackConfigFrom(stored = {}, env = process.env) {
+  const effective = effectiveSlackConfig(stored, env);
   return {
     mode: effective.socketMode ? "socket" : "http",
     socketMode: Boolean(effective.socketMode),
@@ -56,15 +64,21 @@ function getPublicSlackConfig() {
     appTokenLabel: tokenLabel(effective.appToken),
     signingSecretLabel: tokenLabel(effective.signingSecret),
     sources: {
-      botToken: process.env.SLACK_BOT_TOKEN ? "env" : stored.botToken ? "local" : null,
-      appToken: process.env.SLACK_APP_TOKEN ? "env" : stored.appToken ? "local" : null,
-      signingSecret: process.env.SLACK_SIGNING_SECRET ? "env" : stored.signingSecret ? "local" : null,
+      botToken: env.SLACK_BOT_TOKEN ? "env" : stored.botToken ? "local" : null,
+      appToken: env.SLACK_APP_TOKEN ? "env" : stored.appToken ? "local" : null,
+      signingSecret: env.SLACK_SIGNING_SECRET ? "env" : stored.signingSecret ? "local" : null,
     },
   };
 }
 
 function saveSlackConfig(input = {}) {
   const current = readStoredSlackConfig();
+  const next = nextStoredSlackConfig(current, input);
+  writeStoredSlackConfig(next);
+  return getPublicSlackConfig();
+}
+
+function nextStoredSlackConfig(current = {}, input = {}) {
   const next = { ...current };
   for (const key of ["botToken", "appToken", "signingSecret"]) {
     if (typeof input[key] === "string" && input[key].trim() && !isMasked(input[key])) {
@@ -83,8 +97,7 @@ function saveSlackConfig(input = {}) {
   if (Object.prototype.hasOwnProperty.call(input, "customizeProfileMessages")) {
     next.customizeProfileMessages = Boolean(input.customizeProfileMessages);
   }
-  writeStoredSlackConfig(next);
-  return getPublicSlackConfig();
+  return next;
 }
 
 function readStoredSlackConfig() {
@@ -126,7 +139,10 @@ function truthy(value) {
 }
 
 module.exports = {
+  effectiveSlackConfig,
   getPublicSlackConfig,
   getSlackConfig,
+  nextStoredSlackConfig,
+  publicSlackConfigFrom,
   saveSlackConfig,
 };

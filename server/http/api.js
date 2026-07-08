@@ -1,9 +1,11 @@
 "use strict";
 
 const { handleAdminRoutes } = require("./routes/admin");
+const { handleAuthorizationRoutes } = require("./routes/authorization");
 const { handleDecisionRoutes } = require("./routes/decisions");
 const { handleIntegrationRoutes } = require("./routes/integrations");
 const { handleMobileRoutes } = require("./routes/mobile");
+const { handleNetworkProxyRoutes } = require("./routes/network-proxy");
 const { handlePublicAccessRoutes } = require("./routes/public-access");
 const { handleSystemRoutes } = require("./routes/system");
 const { handleTaskRoutes } = require("./routes/tasks");
@@ -13,6 +15,8 @@ const ROUTES = [
   handleIntegrationRoutes,
   handlePublicAccessRoutes,
   handleMobileRoutes,
+  handleAuthorizationRoutes,
+  handleNetworkProxyRoutes,
   handleDecisionRoutes,
   handleTaskRoutes,
   handleAdminRoutes,

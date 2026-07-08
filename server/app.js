@@ -8,6 +8,7 @@ const {
   DATA_DIR,
   RUNS_DIR,
   ROOT_DIR,
+  appendAuthorizationAudit,
   appendDecisionLog,
   appendEvent,
   loadState,
@@ -95,6 +96,7 @@ const {
 } = createDecisionDomain({
   PRODUCT_NAME,
   RUNS_DIR,
+  appendAuthorizationAudit,
   appendDecisionLog,
   appendEvent,
   makeId,
@@ -135,6 +137,7 @@ const serveStatic = createStaticHandler({ publicDir: PUBLIC_DIR });
 
 const channelProcessor = createChannelProcessor({
   appendDecisionReply,
+  appendAuthorizationAudit,
   appendEvent,
   broadcast,
   createTask,
@@ -142,6 +145,7 @@ const channelProcessor = createChannelProcessor({
   isTaskRunning,
   loadState,
   makeId,
+  notifyDecisionRequested: notifyDecisionRequestedEverywhere,
   markClarificationDecisionApproved,
   notifyTaskAccepted,
   nowIso,
@@ -173,6 +177,8 @@ const {
 
 const handleApi = createApiHandler({
   appendDecisionReply,
+  appendAuthorizationAudit,
+  appendDecisionLog,
   appendEvent,
   archiveTask,
   broadcast,
@@ -187,8 +193,10 @@ const handleApi = createApiHandler({
   isTaskRunning,
   listChannelAdapters,
   loadState,
+  makeId,
   markClarificationDecisionApproved,
   mobilePush,
+  notifyDecisionRequested: notifyDecisionRequestedEverywhere,
   nowIso,
   pauseTask,
   processChannelEnvelope: channelProcessor.processChannelEnvelope,

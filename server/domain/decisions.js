@@ -2,11 +2,13 @@
 
 const { cleanProfileText } = require("./profile");
 const { createDecisionTestTaskHandler } = require("./decision-test-task");
+const { createAuthorizationGrantFromDecision } = require("../authorization/grants");
 
 function createDecisionDomain(deps = {}) {
   const {
     PRODUCT_NAME = "Second",
     RUNS_DIR,
+    appendAuthorizationAudit,
     appendDecisionLog,
     appendEvent,
     makeId,
@@ -174,6 +176,10 @@ function createDecisionDomain(deps = {}) {
     decision.status = verdict;
     decision.selectedOption = body.optionId || fallbackOption || decision.selectedOption;
     decision.decidedAt = nowIso();
+    const authorizationGrant =
+      verdict === "approved" && decision.authorization
+        ? createAuthorizationGrantFromDecision(state, decision, { makeId, nowIso })
+        : null;
 
     const task = state.tasks.find((item) => item.id === decision.taskId);
     if (task) {
@@ -192,9 +198,26 @@ function createDecisionDomain(deps = {}) {
           selectedOption: decision.selectedOption,
           title: decision.title,
         });
+        if (authorizationGrant) {
+          appendDecisionLog({
+            event: "authorization.grant.created",
+            decisionId: decision.id,
+            taskId: decision.taskId,
+            grantId: authorizationGrant.id,
+            fingerprint: authorizationGrant.fingerprint,
+          });
+          appendAuthorizationAudit?.(state, {
+            event: "authorization.grant.created",
+            decisionId: decision.id,
+            taskId: decision.taskId,
+            grantId: authorizationGrant.id,
+            fingerprint: authorizationGrant.fingerprint,
+            ruleId: authorizationGrant.ruleId,
+          });
+        }
         saveState(state);
         notifyDecisionResolved(decision, task).catch(() => {});
-        return { decision, task };
+        return { decision, grant: authorizationGrant, task };
       }
 
       if (verdict === "approved") {
@@ -253,9 +276,26 @@ function createDecisionDomain(deps = {}) {
       selectedOption: decision.selectedOption,
       title: decision.title,
     });
+    if (authorizationGrant) {
+      appendDecisionLog({
+        event: "authorization.grant.created",
+        decisionId: decision.id,
+        taskId: decision.taskId,
+        grantId: authorizationGrant.id,
+        fingerprint: authorizationGrant.fingerprint,
+      });
+      appendAuthorizationAudit?.(state, {
+        event: "authorization.grant.created",
+        decisionId: decision.id,
+        taskId: decision.taskId,
+        grantId: authorizationGrant.id,
+        fingerprint: authorizationGrant.fingerprint,
+        ruleId: authorizationGrant.ruleId,
+      });
+    }
     saveState(state);
     notifyDecisionResolved(decision, task).catch(() => {});
-    return { decision, shouldResumeCodex: Boolean(task?.codexSessionId), task };
+    return { decision, grant: authorizationGrant, shouldResumeCodex: Boolean(task?.codexSessionId), task };
   }
 
   function archiveTask(state, taskId) {

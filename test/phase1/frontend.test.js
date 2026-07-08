@@ -384,10 +384,33 @@ test("frontend auth view renders candidates and authorization rules", () => {
   const auth = authViewUi.createAuthView(presentation);
   const html = auth.render({
     preferences: [{ text: "中文 PR 描述", source: "PREFERENCES.md" }],
+    decisions: [{ id: "D-auth", status: "pending", authorization: { fingerprint: "abc123" } }],
+    authorization: { grants: [{ id: "G-1", status: "active", fingerprint: "abc123" }] },
     candidates: [{ id: "C-1", confidence: "高", status: "pending", text: "允许本地测试", source: "history" }],
     rules: [{ kind: "强制 Gate", text: "生产变更必须审批", source: "AUTHORIZATION.md", fresh: true }],
+  }, {
+    authLab: {
+      input: "cat .env",
+      result: {
+        action: "deny",
+        reason: "Reading secrets is never allowed.",
+        ruleId: "deny.expose_credentials",
+        fingerprint: "abc123",
+        intent: {
+          action: "read",
+          target: { type: "path", value: ".env" },
+          environment: "local",
+          reversibility: "reversible",
+          identity: "agent",
+        },
+      },
+    },
   });
   assert.match(html, /授权与记忆/);
+  assert.match(html, /Authorization Lab/);
+  assert.match(html, /data-action="auth-lab-submit"/);
+  assert.match(html, /deny\.expose_credentials/);
+  assert.match(html, /Grant ledger/);
   assert.match(html, /data-action="candidate"/);
   assert.match(html, /生产变更必须审批/);
 });
@@ -1118,4 +1141,48 @@ test("frontend action handler mutates UI state through injected dependencies", a
   assert.equal(refreshes, 7);
   assert.ok(renders >= 3);
   globalThis.navigator = previousNavigator;
+});
+
+test("frontend authorization lab submits dry-run requests to daemon API", async () => {
+  const ui = { authLab: { input: "psql prod -c 'update orders set status=1'", result: null, error: "" } };
+  const calls = [];
+  let renders = 0;
+  const handler = actions.createActionHandler({
+    PRODUCT_NAME: "Second",
+    api: async (url, options = {}) => {
+      calls.push({ url, options });
+      return {
+        action: "gate",
+        ruleId: "gate.prod_write",
+        fingerprint: "fp1",
+        intent: { action: "write" },
+      };
+    },
+    app: { querySelector: () => null },
+    currentProfileForm: () => ({}),
+    currentPublicAccessForm: () => ({}),
+    currentSlackForm: () => ({}),
+    getState: () => ({ decisions: [], integrations: {} }),
+    profileFormFromState: () => ({}),
+    refresh: async () => {},
+    render: () => {
+      renders += 1;
+    },
+    showToast: () => {},
+    slackFormFromPublic: slackSettingsUi.slackFormFromPublic,
+    ui,
+    updateProfileModalPreview: () => {},
+  });
+
+  await handler({ action: "auth-lab-submit" });
+  assert.equal(calls[0].url, "/api/authorize");
+  assert.equal(calls[0].options.body.dryRun, true);
+  assert.equal(calls[0].options.body.mode, "dry_run");
+  assert.equal(calls[0].options.body.command, "psql prod -c 'update orders set status=1'");
+  assert.equal(ui.authLab.result.action, "gate");
+  assert.ok(renders >= 2);
+
+  await handler({ action: "auth-lab-example", example: "deny" });
+  assert.equal(ui.authLab.input, "cat .env");
+  assert.equal(ui.authLab.result, null);
 });

@@ -16,6 +16,11 @@ const codexRuntimeAdapter = {
   sessionLabel: "Codex session",
   versionArgs: ["--version"],
   status: "available",
+  authorization: {
+    mode: "hooks",
+    granularity: "action",
+    supportsGateResume: true,
+  },
   normalizeEvent(raw, context = {}) {
     return normalizeAgentRuntimeEvent("codex", raw, context);
   },

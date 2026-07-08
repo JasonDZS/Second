@@ -10,55 +10,25 @@ const {
   saveState,
 } = require("./state");
 const { notifyDecisionRequested } = require("./channels");
+const { evaluateAuthorization } = require("./authorization/engine");
+const { payloadText, toolNameFromPayload } = require("./authorization/intent-parser");
 
 const PRODUCT_NAME = "Second";
-const DENY_PATTERNS = [
-  /(^|[/\s])\.env(?:[.\w-]*)?(?:\s|$)/i,
-  /\bid_rsa\b/i,
-  /\bprivate[_-]?key\b/i,
-  /\bsecret(s)?\b/i,
-  /\brm\s+-rf\s+\/(?:\s|$)/i,
-  /\brm\s+-rf\s+~(?:\s|$)/i,
-];
-
-const GATE_PATTERNS = [
-  /\b(prod|production)\b/i,
-  /\bpsql\b.*\b(update|delete|insert|alter|drop|truncate)\b/i,
-  /\b(mysql|redis-cli|kubectl|terraform|pulumi)\b/i,
-  /\b(git\s+push|gh\s+pr\s+merge|gh\s+release|npm\s+publish)\b/i,
-  /\bdeploy(ment)?\b/i,
-  /\bsudo\b/i,
-];
 
 function evaluateToolUse(payload = {}) {
-  const text = payloadText(payload);
-  const toolName = payload.tool_name || payload.toolName || payload.name || payload.tool || "unknown";
-  const deny = DENY_PATTERNS.find((pattern) => pattern.test(text));
-  if (deny) {
-    return {
-      decision: "deny",
-      risk: "高",
-      reason: `命中拒绝规则: ${deny}`,
-      toolName,
-      text,
-    };
-  }
-  const gate = GATE_PATTERNS.find((pattern) => pattern.test(text));
-  if (gate) {
-    return {
-      decision: "human_gate",
-      risk: "高",
-      reason: `命中 Human Gate 规则: ${gate}`,
-      toolName,
-      text,
-    };
-  }
+  const evaluation = evaluateAuthorization(payload);
   return {
-    decision: "allow",
-    risk: "低",
-    reason: `未命中 ${PRODUCT_NAME} 高风险规则`,
-    toolName,
-    text,
+    decision: evaluation.decision,
+    action: evaluation.action,
+    ok: evaluation.ok,
+    risk: evaluation.risk,
+    reason: evaluation.reason,
+    ruleId: evaluation.ruleId,
+    matchedRule: evaluation.matchedRule,
+    intent: evaluation.intent,
+    fingerprint: evaluation.fingerprint,
+    toolName: toolNameFromPayload(payload),
+    text: payloadText(payload),
   };
 }
 
@@ -140,6 +110,15 @@ function createPolicyDecision(eventName, payload, evaluation) {
       },
     ],
     artifacts: [],
+    authorization: {
+      intent: evaluation.intent,
+      fingerprint: evaluation.fingerprint,
+      ruleId: evaluation.ruleId,
+      matchedRule: evaluation.matchedRule,
+      granularityAllowed: evaluation.matchedRule?.granularity || ["once"],
+      toolName: evaluation.toolName,
+      payloadText: evaluation.text.slice(0, 4000),
+    },
   };
   if (task?.channel) decision.channel = task.channel;
   if (task?.slack) decision.slack = task.slack;
@@ -169,6 +148,8 @@ function createPolicyDecision(eventName, payload, evaluation) {
     taskId,
     toolName: evaluation.toolName,
     reason: evaluation.reason,
+    fingerprint: evaluation.fingerprint,
+    ruleId: evaluation.ruleId,
   });
   saveState(state);
   notifyDecisionRequested(decision, task).catch(() => {});
@@ -185,33 +166,10 @@ function recordPolicyEvent(eventName, evaluation) {
     event: "hook.deny",
     toolName: evaluation.toolName,
     reason: evaluation.reason,
+    fingerprint: evaluation.fingerprint,
+    ruleId: evaluation.ruleId,
   });
   saveState(state);
-}
-
-function payloadText(payload) {
-  const pieces = [];
-  collectText(payload, pieces);
-  return pieces.join("\n");
-}
-
-function collectText(value, out) {
-  if (value == null) return;
-  if (typeof value === "string") {
-    out.push(value);
-    return;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    out.push(String(value));
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const child of value) collectText(child, out);
-    return;
-  }
-  if (typeof value === "object") {
-    for (const child of Object.values(value)) collectText(child, out);
-  }
 }
 
 module.exports = {

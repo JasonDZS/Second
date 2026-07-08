@@ -8,6 +8,12 @@ const path = require("node:path");
 const { PassThrough } = require("node:stream");
 
 const { appendDecisionReply, computePhase1Metrics, findChannelThreadTask, updateProfile } = require("../../server/app");
+const authorizationEngine = require("../../server/authorization/engine");
+const authorizationGrants = require("../../server/authorization/grants");
+const authorizationIntent = require("../../server/authorization/intent-parser");
+const authorizationPolicyLoader = require("../../server/authorization/policy-loader");
+const authorizationRuleCandidates = require("../../server/authorization/rule-candidates");
+const authorizationService = require("../../server/authorization/service");
 const { evaluateToolUse } = require("../../server/policy");
 const assistant = require("../../server/channels/assistant");
 const slack = require("../../server/channels/slack");
@@ -16,6 +22,7 @@ const channelProcessor = require("../../server/channels/processor");
 const slackEvents = require("../../server/channels/slack/events");
 const slackSocket = require("../../server/channels/slack/socket");
 const slackText = require("../../server/channels/slack/text");
+const slackConfig = require("../../server/slack-config");
 const codexEvents = require("../../server/codex/events");
 const codexPrompts = require("../../server/codex/prompts");
 const codexProcessClose = require("../../server/codex/process-close");
@@ -25,7 +32,11 @@ const codexTasks = require("../../server/codex/tasks");
 const decisionDomain = require("../../server/domain/decisions");
 const stateViewDomain = require("../../server/domain/state-view");
 const httpJson = require("../../server/http/json");
+const httpAdminRoutes = require("../../server/http/routes/admin");
+const httpAuthorizationRoutes = require("../../server/http/routes/authorization");
 const httpMobileRoutes = require("../../server/http/routes/mobile");
+const httpNetworkProxyRoutes = require("../../server/http/routes/network-proxy");
+const mcp = require("../../server/mcp");
 const runtimeRecovery = require("../../server/runtime/recovery");
 const runtimeResume = require("../../server/runtime/resume");
 const runtimeTaskExecutor = require("../../server/runtime/task-executor");
@@ -65,6 +76,12 @@ module.exports = {
   apiClient,
   appendDecisionReply,
   assert,
+  authorizationEngine,
+  authorizationGrants,
+  authorizationIntent,
+  authorizationPolicyLoader,
+  authorizationRuleCandidates,
+  authorizationService,
   assistant,
   assistantWidgetUi,
   authViewUi,
@@ -87,11 +104,15 @@ module.exports = {
   findChannelThreadTask,
   fs,
   httpJson,
+  httpAdminRoutes,
+  httpAuthorizationRoutes,
   httpMobileRoutes,
+  httpNetworkProxyRoutes,
   httpStatic,
   inboxViewUi,
   mobileViewUi,
   mobilePush,
+  mcp,
   publicAccess,
   onboardingViewUi,
   os,
@@ -109,6 +130,7 @@ module.exports = {
   settingsViewUi,
   shellViewUi,
   slack,
+  slackConfig,
   slackEvents,
   slackSettingsUi,
   slackSocket,

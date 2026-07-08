@@ -5,8 +5,31 @@ Second keeps authorization separate from preferences.
 ## Files
 
 - `.second/profile/PREFERENCES.md`: user style and execution preferences. These are context, not permission.
-- `.second/profile/AUTHORIZATION.md`: static allow, Human Gate, and deny rules.
+- `.second/profile/AUTHORIZATION.md`: human-readable authorization summary used as prompt context only.
+- `.second/profile/AUTHORIZATION.yml`: daemon-loaded policy file and the authority for allow/gate/deny rules.
 - `.second/profile/DECISIONS.log`: append-only record of decision requests and outcomes.
+- `.second/profile/AUTHORIZATION_AUDIT.log`: append-only authorization events, including allow/gate/deny, grant consume/expire, quota trips, and rule creation.
+
+`AUTHORIZATION.yml` is declarative:
+
+```yaml
+version: 1
+defaults:
+  unknown_action: gate
+deny:
+  - id: deny.expose_credentials
+    risk_tag: expose_credentials
+gate:
+  - id: gate.deploy
+    action: deploy
+    granularity: [once, plan]
+green:
+  - id: allow.read_workspace
+    action: read
+    scope: workspace
+```
+
+Rules are evaluated in this order: deny, active grant, gate, green allow, unknown default. Policy load failures fail closed as deny.
 
 ## Default Boundaries
 
@@ -27,9 +50,42 @@ Denied:
 
 - Reading `.env`, private keys, SSH keys, token files, or files containing secrets unless explicitly provided for the task.
 - Destructive filesystem operations such as wiping home directories or deleting unrelated repositories.
+- Modifying Second authorization files, decision logs, audit logs, trace files, or hook/policy enforcement.
+
+## Intent And API
+
+`POST /api/authorize` accepts tool payloads from hooks, MCP, or Authorization Lab. Dry-run requests use `dryRun: true` or `mode: "dry_run"` and do not mutate state.
+
+The daemon normalizes each tool call into an intent:
+
+- `action`: `read`, `write`, `exec`, `communicate`, `push`, `deploy`, `install_package`, `system_change`, or `unknown`.
+- `target`: path, repository, branch, domain, recipient, service, database, or tool.
+- `environment`: `local`, `dev`, `staging`, `prod`, `external`, or `unknown`.
+- `reversibility`: `reversible`, `hard_to_reverse`, `irreversible`, or `unknown`.
+- `identity`: `agent`, `user_named`, `service_account`, `external_facing`, or `unknown`.
+
+The response includes `action`, `reason`, `ruleId`, `intent`, `fingerprint`, `matchedRule`, `decisionId` when gated, and grant preview fields in dry-run mode.
+
+## Grants
+
+Approved authorization decisions create scoped grants:
+
+- `once`: one retry of the same task and same fingerprint; consumed immediately.
+- `session`: same task, same action/target/environment/identity; expires when the task is terminal.
+- `plan`: same task and only structured plan items; plan text alone is not authorization scope.
+
+Rejected decisions create no grant. Deny rules are evaluated before grants, so a grant cannot override a red-zone action.
 
 ## Runtime Enforcement
 
-Each Codex run workspace receives `.codex/hooks.json`, `.codex/config.toml`, and the Second policy hook. The hook injects `SECOND_TASK_ID`, evaluates the attempted tool call, and creates a Human Gate decision when the action matches high-risk policy.
+Each Codex run workspace receives `.codex/hooks.json`, `.codex/config.toml`, and the Second policy hook. The hook injects `SECOND_TASK_ID`, calls daemon `/api/authorize`, and fails closed when the daemon is unavailable or returns invalid data.
 
 When a decision is approved or rejected, Second resumes the captured Codex session if a session id was recorded.
+
+Runtimes declare authorization capability. Codex currently uses action-level hooks. No-hook runtimes are restricted: yellow-zone actions are treated as denied unless routed through a Second MCP proxy tool. The Decision MCP server exposes `authorization_check` for generic MCP authorization checks.
+
+## Network Proxy
+
+`POST /api/proxy/http` is the daemon-owned outbound HTTP path. It accepts `method`, `url`, optional `headers`, optional `body`, and optional `taskId`, then calls the same authorization engine before any outbound request is made. Gate/deny responses do not touch the network.
+
+Codex run environments receive `SECOND_AUTH_PROXY=<daemon>/api/proxy/http`. Agent-supplied credential headers such as `Authorization`, `Cookie`, and `X-Api-Key` are stripped; long-lived service credentials should stay inside daemon channel adapters or future credential proxy code, not inside agent context.

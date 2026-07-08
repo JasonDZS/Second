@@ -2,7 +2,16 @@
 
 const http = require("http");
 const readline = require("readline");
-const { appendEvent, loadState, nowIso, saveState } = require("./state");
+const {
+  appendAuthorizationAudit,
+  appendDecisionLog,
+  appendEvent,
+  loadState,
+  makeId,
+  nowIso,
+  saveState,
+} = require("./state");
+const { authorizeToolUse } = require("./authorization/service");
 const { createMcpDecisionRequest, resolveDecision } = require("./app");
 
 const PRODUCT_NAME = "Second";
@@ -85,6 +94,22 @@ const TOOLS = [
       required: ["id", "message"],
     },
   },
+  {
+    name: "authorization_check",
+    description: `Evaluate a tool payload through ${PRODUCT_NAME} authorization. In enforce mode, gate/deny stops the caller and may create a Human Gate decision.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string" },
+        command: { type: "string" },
+        taskId: { type: "string" },
+        dryRun: { type: "boolean" },
+        mode: { type: "string", enum: ["dry_run", "enforce"] },
+        payload: { type: "object" },
+      },
+      required: ["tool"],
+    },
+  },
 ];
 
 function serveMcp({ input = process.stdin, output = process.stdout } = {}) {
@@ -140,7 +165,7 @@ async function handle(req) {
   };
 }
 
-async function callTool(name, args) {
+async function callTool(name, args, options = {}) {
   if (name === "decision_request") {
     const result = (await tryDaemonRequest("/api/mcp/decision-request", args)) || createMcpDecisionRequest(loadState(), args);
     return textContent(
@@ -201,6 +226,37 @@ async function callTool(name, args) {
     });
     saveState(state);
     return textContent(JSON.stringify({ ok: true }, null, 2));
+  }
+
+  if (name === "authorization_check") {
+    const payload = {
+      ...(args.payload || {}),
+      ...args,
+      dryRun: args.dryRun === true || args.mode === "dry_run",
+      source: args.source || "Second MCP authorization proxy",
+    };
+    delete payload.payload;
+    const base = Object.prototype.hasOwnProperty.call(options, "daemonUrl") ? options.daemonUrl : daemonUrl();
+    const requestDaemon = options.daemonRequest || daemonRequest;
+    let result;
+    if (base) {
+      try {
+        result = await requestDaemon(base, "/api/authorize", payload);
+      } catch (error) {
+        result = authorizationTransportFailure(error);
+      }
+    } else {
+      result = authorizeToolUse(payload, {
+        appendAuthorizationAudit,
+        appendDecisionLog,
+        appendEvent,
+        loadState,
+        makeId,
+        nowIso,
+        saveState,
+      });
+    }
+    return textContent(JSON.stringify(result, null, 2));
   }
 
   throw new Error(`Unknown tool: ${name}`);
@@ -273,4 +329,16 @@ function textContent(text) {
   };
 }
 
-module.exports = { serveMcp };
+function authorizationTransportFailure(error) {
+  return {
+    ok: false,
+    action: "deny",
+    decision: "deny",
+    risk: "高",
+    reason: `${PRODUCT_NAME} MCP authorization request failed closed: ${error.message}`,
+    ruleId: "deny.authorization_transport",
+    source: "Second MCP authorization proxy",
+  };
+}
+
+module.exports = { TOOLS, callTool, serveMcp };

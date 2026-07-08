@@ -4,6 +4,28 @@ const fs = require("fs");
 const path = require("path");
 const { ROOT_DIR } = require("../state");
 
+const CODEX_ENV_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TERM",
+  "COLORTERM",
+  "CODEX_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "SSL_CERT_FILE",
+  "NODE_EXTRA_CA_CERTS",
+];
+
 function prepareCodexRuntimeFiles(task, state = {}) {
   const codexDir = path.join(task.workspace, ".codex");
   const hooksDir = path.join(codexDir, "hooks");
@@ -37,6 +59,7 @@ function prepareCodexRuntimeFiles(task, state = {}) {
       "",
       "[mcp_servers.second-decision.env]",
       `SECOND_DAEMON = ${tomlString(daemon)}`,
+      `SECOND_AUTH_PROXY = ${tomlString(authProxyAddress(state))}`,
       `SECOND_ROOT = ${tomlString(ROOT_DIR)}`,
       "",
       "[mcp_servers.second-decision.tools.decision_request]",
@@ -100,18 +123,29 @@ function codexNetworkArgs(state = {}) {
   return codexNetworkAccessEnabled(state) ? ["-c", "sandbox_workspace_write.network_access=true"] : [];
 }
 
-function codexEnv(state, task) {
+function codexEnv(state, task, sourceEnv = process.env) {
+  const env = {};
+  for (const key of CODEX_ENV_ALLOWLIST) {
+    if (sourceEnv[key] !== undefined) env[key] = sourceEnv[key];
+  }
   return {
-    ...process.env,
+    ...env,
     NO_COLOR: "1",
     SECOND_ROOT: ROOT_DIR,
     SECOND_TASK_ID: task.id,
-    SECOND_DAEMON: process.env.SECOND_DAEMON || daemonAddress(state),
+    SECOND_DAEMON: sourceEnv.SECOND_DAEMON || daemonAddress(state, sourceEnv),
+    SECOND_AUTH_PROXY: sourceEnv.SECOND_AUTH_PROXY || authProxyAddress(state, sourceEnv),
   };
 }
 
-function daemonAddress(state = {}) {
-  return process.env.SECOND_DAEMON || `localhost:${state.daemon?.port || process.env.SECOND_PORT || 7317}`;
+function daemonAddress(state = {}, sourceEnv = process.env) {
+  return sourceEnv.SECOND_DAEMON || `localhost:${state.daemon?.port || sourceEnv.SECOND_PORT || 7317}`;
+}
+
+function authProxyAddress(state = {}, sourceEnv = process.env) {
+  const daemon = daemonAddress(state, sourceEnv);
+  const base = /^https?:\/\//i.test(daemon) ? daemon : `http://${daemon}`;
+  return `${base.replace(/\/+$/, "")}/api/proxy/http`;
 }
 
 function tomlString(value) {
@@ -124,6 +158,8 @@ function isTruthy(value) {
 
 module.exports = {
   codexEnv,
+  CODEX_ENV_ALLOWLIST,
+  authProxyAddress,
   codexNetworkAccessEnabled,
   codexNetworkArgs,
   daemonAddress,

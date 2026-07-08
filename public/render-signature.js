@@ -45,6 +45,8 @@
         preferences: nextState.preferences,
         candidates: nextState.candidates,
         rules: nextState.rules,
+        authorization: nextState.authorization,
+        authLab: ui.authLab,
       });
     }
     if (ui.view === "mobile") {
