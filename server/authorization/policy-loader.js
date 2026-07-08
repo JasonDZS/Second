@@ -115,7 +115,7 @@ function loadAuthorizationPolicy(options = {}) {
   }
   try {
     const text = fs.readFileSync(policyFile, "utf8");
-    const parsed = parsePolicyText(text);
+    const parsed = mergeDefaultRules(parsePolicyText(text));
     validatePolicy(parsed);
     return { policy: parsed, source: policyFile, failedClosed: false };
   } catch (error) {
@@ -139,6 +139,23 @@ function addGreenAuthorizationRule(rule, options = {}) {
   const saved = saveAuthorizationPolicy(policy, { policyFile: options.policyFile || loaded.source });
   if (!exists) appendAuthorizationRuleProjection(rule, options);
   return { ...saved, changed: !exists };
+}
+
+function mergeDefaultRules(policy = {}) {
+  const merged = {
+    ...clonePolicy(DEFAULT_POLICY),
+    ...policy,
+    defaults: { ...DEFAULT_POLICY.defaults, ...(policy.defaults || {}) },
+  };
+  for (const section of ["deny", "gate", "green"]) {
+    const current = Array.isArray(policy[section]) ? policy[section] : [];
+    const ids = new Set(current.map((rule) => rule.id));
+    merged[section] = [
+      ...current,
+      ...DEFAULT_POLICY[section].filter((rule) => !ids.has(rule.id)).map((rule) => ({ ...rule })),
+    ];
+  }
+  return merged;
 }
 
 function appendAuthorizationRuleProjection(rule, options = {}) {
@@ -353,6 +370,7 @@ module.exports = {
   appendAuthorizationRuleProjection,
   authorizationRuleProjectionLine,
   loadAuthorizationPolicy,
+  mergeDefaultRules,
   parsePolicyText,
   saveAuthorizationPolicy,
   serializePolicy,

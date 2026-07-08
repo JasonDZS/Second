@@ -25,6 +25,7 @@ const CODEX_ENV_ALLOWLIST = [
   "SSL_CERT_FILE",
   "NODE_EXTRA_CA_CERTS",
 ];
+const CODEX_AUTHORIZATION_TOOL_MATCHER = "Bash|apply_patch|Edit|Write|Read|Grep|Glob|WebFetch|HTTP";
 
 function prepareCodexRuntimeFiles(task, state = {}) {
   const codexDir = path.join(task.workspace, ".codex");
@@ -75,7 +76,7 @@ function prepareCodexRuntimeFiles(task, state = {}) {
         hooks: {
           PreToolUse: [
             {
-              matcher: "Bash|apply_patch|Edit|Write",
+              matcher: CODEX_AUTHORIZATION_TOOL_MATCHER,
               hooks: [
                 {
                   type: "command",
@@ -88,7 +89,7 @@ function prepareCodexRuntimeFiles(task, state = {}) {
           ],
           PermissionRequest: [
             {
-              matcher: "Bash|apply_patch|Edit|Write",
+              matcher: CODEX_AUTHORIZATION_TOOL_MATCHER,
               hooks: [
                 {
                   type: "command",
@@ -160,6 +161,7 @@ module.exports = {
   codexEnv,
   CODEX_ENV_ALLOWLIST,
   authProxyAddress,
+  CODEX_AUTHORIZATION_TOOL_MATCHER,
   codexNetworkAccessEnabled,
   codexNetworkArgs,
   daemonAddress,

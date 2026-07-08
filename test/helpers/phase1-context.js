@@ -31,6 +31,7 @@ const codexRuntimeFiles = require("../../server/codex/runtime-files");
 const codexTasks = require("../../server/codex/tasks");
 const decisionDomain = require("../../server/domain/decisions");
 const stateViewDomain = require("../../server/domain/state-view");
+const stateStore = require("../../server/state");
 const httpJson = require("../../server/http/json");
 const httpAdminRoutes = require("../../server/http/routes/admin");
 const httpAuthorizationRoutes = require("../../server/http/routes/authorization");
@@ -136,6 +137,7 @@ module.exports = {
   slackSocket,
   slackText,
   stateViewDomain,
+  stateStore,
   taskTraceAgentViewUi,
   taskTraceFormatUi,
   taskTraceSourceViewUi,

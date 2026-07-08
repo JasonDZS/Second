@@ -539,7 +539,9 @@ test("Codex runtime files are generated inside each run workspace", () => {
     assert.match(config, /SECOND_ROOT/);
 
     const hooks = JSON.parse(fs.readFileSync(files.hooksFile, "utf8"));
-    assert.equal(hooks.hooks.PreToolUse[0].matcher, "Bash|apply_patch|Edit|Write");
+    assert.equal(hooks.hooks.PreToolUse[0].matcher, codexRuntimeFiles.CODEX_AUTHORIZATION_TOOL_MATCHER);
+    assert.match(hooks.hooks.PreToolUse[0].matcher, /Read/);
+    assert.match(hooks.hooks.PreToolUse[0].matcher, /WebFetch/);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
   }
@@ -569,4 +571,3 @@ test("Codex network access is opt-in and emitted as CLI/config override", () => 
     fs.rmSync(workspace, { recursive: true, force: true });
   }
 });
-

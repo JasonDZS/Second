@@ -196,6 +196,7 @@ function ensureProfileFiles() {
   );
   writeIfMissing(DECISIONS_LOG_FILE, "");
   writeIfMissing(AUTHORIZATION_AUDIT_FILE, "");
+  secureProfileFileModes();
   return {
     preferencesFile: PREFERENCES_FILE,
     authorizationFile: AUTHORIZATION_FILE,
@@ -203,6 +204,30 @@ function ensureProfileFiles() {
     decisionsLogFile: DECISIONS_LOG_FILE,
     authorizationAuditFile: AUTHORIZATION_AUDIT_FILE,
   };
+}
+
+function secureProfileFileModes() {
+  const dirModes = [
+    DATA_DIR,
+    PROFILE_DIR,
+  ];
+  const fileModes = [
+    PREFERENCES_FILE,
+    AUTHORIZATION_FILE,
+    AUTHORIZATION_YAML_FILE,
+    DECISIONS_LOG_FILE,
+    AUTHORIZATION_AUDIT_FILE,
+  ];
+  for (const dir of dirModes) chmodIfExists(dir, 0o700);
+  for (const file of fileModes) chmodIfExists(file, 0o600);
+}
+
+function chmodIfExists(file, mode) {
+  try {
+    if (fs.existsSync(file)) fs.chmodSync(file, mode);
+  } catch {
+    // Permission tightening is best-effort on non-POSIX filesystems.
+  }
 }
 
 function readProfileContext() {
@@ -316,5 +341,6 @@ module.exports = {
   nowIso,
   readProfileContext,
   saveState,
+  secureProfileFileModes,
   traceT2087,
 };

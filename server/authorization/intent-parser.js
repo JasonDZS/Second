@@ -24,6 +24,8 @@ function parseAuthorizationIntent(payload = {}) {
     intent = parseBashCommand(payload.command || payload.args?.command || text, context);
   } else if (/^(?:http|fetch|network|web_request)$/i.test(toolName) || payload.url || payload.args?.url) {
     intent = parseHttpRequest(payload, toolName, text);
+  } else if (/^(?:read|grep|glob|search)$/i.test(toolName)) {
+    intent = parseFileReadTool(payload, context, toolName);
   } else if (/^(?:edit|write|apply_patch|applypatch)$/i.test(toolName)) {
     intent = parseFileTool(payload, context, toolName);
   } else if (/slack|email|teams|message|reply/i.test(toolName)) {
@@ -51,6 +53,38 @@ function parseAuthorizationIntent(payload = {}) {
   }
   intent.fingerprint = fingerprintIntent(intent);
   return intent;
+}
+
+function parseFileReadTool(payload, context, toolName) {
+  const text = payloadText(payload);
+  const candidatePath =
+    payload.path ||
+    payload.file_path ||
+    payload.filePath ||
+    payload.args?.path ||
+    payload.args?.file_path ||
+    payload.args?.filePath ||
+    payload.cwd ||
+    payload.args?.cwd ||
+    "";
+  const target = candidatePath
+    ? classifyPath(candidatePath, context)
+    : { type: "workspace", value: context.workspaceRoot, scope: "workspace", labels: [] };
+  const riskTags = [];
+  if (target.labels.includes("secret")) riskTags.push("expose_credentials");
+  return baseIntent({
+    action: "read",
+    target,
+    environment: environmentFromText(candidatePath || text) === "local" && context.environment
+      ? context.environment
+      : environmentFromText(candidatePath || text),
+    reversibility: "reversible",
+    identity: "agent",
+    labels: target.labels,
+    riskTags,
+    toolName,
+    text,
+  });
 }
 
 function parseHttpRequest(payload, toolName, text) {

@@ -84,6 +84,8 @@ When a decision is approved or rejected, Second resumes the captured Codex sessi
 
 Runtimes declare authorization capability. Codex currently uses action-level hooks. No-hook runtimes are restricted: yellow-zone actions are treated as denied unless routed through a Second MCP proxy tool. The Decision MCP server exposes `authorization_check` for generic MCP authorization checks.
 
+Profile authorization files are created with owner-only modes where the filesystem supports POSIX permissions: `.second/profile` is `0700`, and `AUTHORIZATION.yml`, `AUTHORIZATION.md`, `DECISIONS.log`, and `AUTHORIZATION_AUDIT.log` are `0600`. This is local hardening; a separate daemon OS user remains the stronger production boundary.
+
 ## Network Proxy
 
 `POST /api/proxy/http` is the daemon-owned outbound HTTP path. It accepts `method`, `url`, optional `headers`, optional `body`, and optional `taskId`, then calls the same authorization engine before any outbound request is made. Gate/deny responses do not touch the network.

@@ -23,6 +23,7 @@ const {
   path,
   runtimes,
   slackConfig,
+  stateStore,
 } = require("../helpers/phase1-context");
 const secondPolicyHook = require("../../.codex/hooks/second_policy_hook");
 
@@ -92,6 +93,24 @@ test("authorization parser handles wrapper, path, self-protection, and outbound 
       action: "gate",
       ruleId: "gate.communicate",
       intentAction: "communicate",
+    },
+    {
+      payload: { tool: "Read", path: "package.json" },
+      action: "allow",
+      ruleId: "allow.read_workspace",
+      intentAction: "read",
+    },
+    {
+      payload: { tool: "Read", path: ".env.local" },
+      action: "deny",
+      ruleId: "deny.expose_credentials",
+      intentAction: "read",
+    },
+    {
+      payload: { tool: "WebFetch", url: "https://example.com/docs" },
+      action: "gate",
+      ruleId: "gate.external_request",
+      intentAction: "read",
     },
   ];
 
@@ -573,6 +592,23 @@ test("Codex runtime environment is allowlisted and omits host secrets", () => {
   assert.equal(env.OPENAI_API_KEY, undefined);
   assert.equal(env.SLACK_BOT_TOKEN, undefined);
   assert.equal(env.GH_TOKEN, undefined);
+  assert.match(codexRuntimeFiles.CODEX_AUTHORIZATION_TOOL_MATCHER, /Read/);
+  assert.match(codexRuntimeFiles.CODEX_AUTHORIZATION_TOOL_MATCHER, /WebFetch/);
+});
+
+test("profile authorization files are tightened to owner-only modes", () => {
+  stateStore.ensureProfileFiles();
+  stateStore.secureProfileFileModes();
+  if (process.platform === "win32") return;
+  assert.equal(fs.statSync(stateStore.PROFILE_DIR).mode & 0o777, 0o700);
+  for (const file of [
+    stateStore.AUTHORIZATION_FILE,
+    stateStore.AUTHORIZATION_YAML_FILE,
+    stateStore.AUTHORIZATION_AUDIT_FILE,
+    stateStore.DECISIONS_LOG_FILE,
+  ]) {
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600, file);
+  }
 });
 
 test("runtime adapters declare authorization capabilities and downgrade no-hook runtimes", () => {
